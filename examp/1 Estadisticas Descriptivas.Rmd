@@ -1,0 +1,78 @@
+
+Librerias y funciones
+```{r}
+source("../../utilerias/funciones.R")
+```
+
+# Analisis
+* Vector de medias muestraless
+* Matriz de varianzas y covarianzas
+* Graficos
+* Descomposicion Espectral
+* Descomposicion de valores singulares
+
+# Carga de la informacion
+```{r}
+datos <- iris
+head(datos)
+```
+
+# Formato en tipo de datos
+# Escalas
+* Se tiene que identificar si son indicadores o porcentajes
+* Si mantienen el mismo sistema metrico y unicamente medir¨
+```{r}
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+# Descriptivos
+```{r Descriptivas}
+summary(datos) # Estoadisticos descriptivos
+
+# Matriz de varianzas y covarianzas
+S <- cov(datos[, continuas])
+
+# Valores y vectores propios de S
+Propios <- eigen(S)
+Propios$vectors  %*% diag(Propios$values) %*% t(Propios$vectors)
+
+# Variables constantes(varianza cero)
+varCero <- names( which( diag( var(datos[, numericas]) == 0) ) )
+
+datosCentrados <- scale(datos[, numericas], scale = FALSE)
+```
+
+# Graficos
+```{r}
+multi.hist(datos[, numericas]) # Histogramas
+pairs(datos[, numericas]) # Dispersiones
+
+# Grafico de Caja y Bigotes
+par(bty = "n")
+boxplot(datos[, numericas], main="Grafico de caja y bigotes",  
+        las = 2, cex=0.4, cex.main=1, cex.axis = 0.7, col = "sky blue", border= "black");grid()
+```
+
+```{r}
+datos.svd <- svd(datos[, continuas]) # Descomposicion de valores singulares
+```
+
+```{r}
+
+```
+
+
+# Categoricas
+```{r}
+summary(datos[, categoricas])
+```
+

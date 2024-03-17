@@ -1,0 +1,110 @@
+
+Librerias y funciones
+```{r}
+source("../../utilerias/funciones.R")
+```
+
+# Analisis
+* Calculo de la correlacion de Pearson
+* Prueba de Hipotesis
+* Graficos
+* Multicolinealidad(Falta)
+* Descomposicion Espectral(Falta)
+* Correlacion Parcial(Falta)
+
+# Carga de la informacion
+```{r}
+datos <- iris
+head(datos)
+```
+
+# Formato en tipo de datos
+# Escalas
+* Se tiene que identificar si son indicadores o porcentajes
+* Si mantienen el mismo sistema metrico y unicamente medir¨
+```{r}
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+# Estructura de correlaciones
+```{r}
+# Columnas altamente correlacionadas
+corrAlta <- altCorr(datos[, numericas], 0.85)
+
+# Pruebas de hipotesis para la correlaciones
+cor.test(datos[, "Petal.Length"], datos[, "Sepal.Length"])
+
+# Clusterizacion mediante la correlacion
+dd <- as.dist((1 - cor(datos[, numericas]))/2)
+round(1000 * dd) # (prints more nicely)
+plot(hclust(dd), family="Ubuntu Condensed") # Dendograma
+```
+
+# Elipse y correlaciones
+```{r}
+require(shiny)
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+
+    # Application title
+    titlePanel("Correlaciones"),
+
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+          selectInput('varx', 'Variables x', 
+                      sort(colnames(datos[, numericas]), decreasing = F), selectize=FALSE),
+          selectInput('vary', 'Variable y', 
+                      sort(colnames(datos[, numericas]), decreasing = T), selectize=FALSE)
+        ),
+
+        # Show a plot of the generated distribution
+        mainPanel(
+           plotOutput("dispersion"),
+           verbatimTextOutput("cortest")
+        )
+    )
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output, session) {
+  session$onSessionEnded(function() {
+      stopApp(); print("Proceso terminado.")
+    })
+  
+  output$dispersion <- renderPlot({
+    columnas <- c(input$varx, input$vary)
+    
+    plot(datos[, columnas], 
+           main = "Dispersion",
+           xlab = columnas[1], ylab = columnas[2],
+           family="Ubuntu Condensed",
+           bty = "n",  cex.main=1,col=datos$Species, cex=0.5);grid()
+    car::ellipse( colMeans(datos[, columnas]), 
+             shape=cov(datos[, columnas]), 
+             radius=1.2, col="skyblue", lty=2, add=TRUE)
+    })
+  output$cortest <- renderPrint({
+    cor.test(datos[,input$varx], datos[,input$vary])
+    })
+  }
+
+# Analogo a un metodo main ----
+runGadget(ui, server, viewer = dialogViewer(dialogName = "Ajustador",width = 800 , height = 700  ) )
+```
+
+# Categoricas
+```{r}
+summary(datos[, categoricas])
+```
+
