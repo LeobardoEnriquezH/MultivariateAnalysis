@@ -1,0 +1,180 @@
+---
+title: "Componentes"
+output: html_document
+date: "2024-03-19"
+---
+
+# Librerias Necesarias
+```{r}
+library(tidyverse)
+library(caret)
+library(car)
+library(MASS)
+library(factoextra)
+library(FactoMineR)
+library(repr)
+library(pls)
+fig <- function(width, height){
+     options(repr.plot.width = width, repr.plot.height = height)
+}
+```
+
+# Carga de la informacion
+```{r}
+boston=Boston
+summary(boston)
+```
+
+```{r}
+set.seed(1)
+split=createDataPartition(y = boston$medv,p = 0.8,list = F)
+train_data=boston[split,]
+test_data=boston[-split,]
+data=data.frame('Numero de entrenamiento'=nrow(train_data),'Numero en testeo'=nrow(test_data));data
+```
+
+# Varianze Inflation Factor
+```{r}
+model_linear=lm(medv~.,data=train_data)
+collinearity_check=data.frame(Variance_Inflation_factor=vif(model_linear));collinearity_check
+```
+
+# Modelo Lineal
+```{r}
+model_linear1=lm(medv~.-tax,data=train_data)
+predict_linear1=model_linear1%>%predict(test_data)
+
+results_linear1=data.frame(RMSE=RMSE(pred = predict_linear1,obs = test_data$medv),R2=caret::R2( predict_linear1,test_data$medv))
+results_linear1
+```
+
+
+```{r}
+model_linear2=lm(medv~.-rad,data=train_data)
+predict_linear2=model_linear2%>%predict(test_data)
+
+results_linear2=data.frame(RMSE=RMSE(pred = predict_linear2,obs = test_data$medv),R2=caret::R2( predict_linear2,test_data$medv))
+results_linear2
+```
+
+
+```{r}
+set.seed(2)
+model_pca_cv=train(medv~.,data=train_data,method = 'pcr',scale=TRUE,
+             trControl =trainControl(method = 'cv',number = 10),tuneLength = 10)
+```
+
+```{r}
+fig(10,5)
+plot(model_pca_cv,col='red',cex=2)
+model_pca_cv$bestTune
+summary(model_pca_cv$finalModel)
+```
+
+```{r}
+predict=model_pca_cv%>%predict(test_data)
+fig1=data.frame(observed=test_data$medv,predicted=predict)
+fig(12,6)
+fig1%>%ggplot(aes(x=observed,y=predicted))+ geom_point(size=4)+geom_smooth(method = 'lm')+
+       theme(axis.title = element_text(size = 22),axis.text = element_text(size = 16))
+```
+
+# Calculo manual de las componentes principales
+```{r}
+model_pca_manual=PCA(X = train_data,scale.unit = T,graph = F)
+print(model_pca_manual)
+```
+
+```{r}
+get_eigenvalue(model_pca_manual)
+fviz_eig(model_pca_manual,addlabels = T,ylim=c(0,50))+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 16),title =element_text(size = 16))
+```
+
+
+# Correlacion Circular
+```{r}
+get_pca_var(model_pca_manual)
+variable=get_pca_var(model_pca_manual)
+
+variable$coord
+fig(16,10)
+fviz_pca_var(model_pca_manual,col.var = 'black',labelsize=7,repel=T,col.circle = "grey70")+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 16),title =element_text(size = 16),text=element_text(size = 26))
+```
+
+
+# Calidad de la representacion
+```{r}
+library(corrplot)
+variable$cos2
+
+par(mfrow = c(1,2))
+corrplot(variable$cos2,tl.cex = 1.5,tl.col = 'black',is.corr = F)
+corrplot(variable$cos2,tl.cex = 1.5,tl.col = 'black',method = "number",number.cex = 1.5,is.corr = F)
+```
+
+```{r}
+fig(13,5)
+
+fviz_cos2(model_pca_manual,choice = 'var',axes = 1:2)+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 18),title =element_text(size = 16))
+fviz_cos2(model_pca_manual,choice = 'var',axes = 1:5)+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 18),title =element_text(size = 16))
+fig(16,10)
+
+fviz_pca_var(model_pca_manual, col.var = "cos2",alpha.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel=T,labelsize=7)+
+             theme(axis.title = element_text(size = 22),
+             axis.text = element_text(size = 16),title =element_text(size = 16),text=element_text(size = 26))
+
+```
+
+
+# Contribucion de las variables a las componentes principales
+```{r}
+variable$contrib
+fig(13,5)
+
+fviz_contrib(model_pca_manual,choice = 'var',axes = 1)+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 18),title =element_text(size = 16))
+fviz_contrib(model_pca_manual,choice = 'var',axes = 2)+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 18),title =element_text(size = 16))
+fviz_contrib(model_pca_manual,choice = 'var',axes = 1:2)+theme(axis.title = element_text(size = 22),
+                            axis.text = element_text(size = 18),title =element_text(size = 16))
+
+
+
+```
+
+# Interpretacion de la contribucion
+```{r}
+fig(16,10)
+corrplot(variable$contrib,tl.cex = 1.5,tl.col = 'black',is.corr = F)
+corrplot(variable$contrib,tl.cex = 1.5,tl.col = 'black',method = "number",number.cex = 1.5,is.corr = F)
+
+
+fviz_pca_var(model_pca_manual, col.var = "contrib",alpha.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel=T,labelsize=7)+
+             theme(axis.title = element_text(size = 22))
+```
+
+# Con p-value
+```{r}
+p_value=dimdesc(model_pca_manual,axes = 1:2,proba = .05)
+p_value$`Dim.1`
+p_value$`Dim.2`
+```
+
+# Adecuando a 5 componentes principales
+```{r}
+model=train(medv~.,data=train_data,method = 'pcr',scale=TRUE,
+             trControl =trainControl(method = 'cv',number = 10),tuneLength = 5)
+model$bestTune
+pred=model%>%predict(test_data)
+
+resultss=data.frame(RMSE=RMSE(pred = pred,obs = test_data$medv),R2=caret::R2( pred,test_data$medv));resultss
+```
+
+
+
