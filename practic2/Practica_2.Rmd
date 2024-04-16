@@ -1,0 +1,392 @@
+---
+title: ""
+date: ""
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage[spanish]{babel}
+- \usepackage{graphicx}
+- \usepackage{multirow,rotating}
+- \pagenumbering{gobble}
+- \usepackage{dcolumn}
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    includes:
+      in_header: labels.tex
+      before_body: cover.tex
+csl: apa.csl
+bibliography: fuentes1.bib
+---
+
+```{=tex}
+\pagenumbering{gobble}
+\pagenumbering{arabic}
+```
+
+
+```{r setup, include=FALSE }
+knitr::opts_chunk$set(echo = T, fig.width = 6, fig.height = 3.5)
+
+```
+
+```{r, message=FALSE, include=FALSE,warning=FALSE, background=FALSE, comment=FALSE, engine.path=FALSE, cache=FALSE, out.extra=FALSE, results='hide'}
+
+#rm(list = ls())
+
+pacman::p_load(tidyverse,
+               kableExtra,
+               cowplot,
+               stargazer,knitr,viridis,dplyr,readr,scales,quantmod,texreg,tinytex, 
+               tidyr, imager,lubridate,tseries, astsa, growthrates, tis, dynlm, 
+               readxl, foreign, hrbthemes, gtsummary, corrplot, lm.beta, ggfortify,
+               AER, lmtest, sandwich,GGally, ggplot2, car, psych, FactoMineR, factoextra,
+               caret, MASS, repr,scatterplot3d)
+```
+
+
+
+
+```{r, echo=FALSE}
+source("funciones.R") #funciones auxiliares prediseñadas
+```
+
+
+
+
+Utilizando la base de datos Student-Scores y con las columnas de las calificaciones obtenidas por los alumnos realizaremos algunos análisis de multicolinealidad de covariables, componentes principales, pruebas de distribución normal multivariado, diagrama de dispersión y proporción de varianza, el Biplot y agrupaciones, verificación de variables importantes, y regresión lineal múltiple. 
+
+
+## 1. Análisis exploratorio de datos. 
+
+Antes de comenzar cargamos la base de datos que vamos a utilizar y hacemos una inspección rápida del tipo de datos para cada variable y de la estadística descriptiva de los datos numéricos.  
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Cargamos la base de datos 
+student_scores <- read.csv("DataSets/student-scores.csv") #con read_csv no reconoce como numéricos
+summary(student_scores) #Estadística descriptiva de los datos
+```
+
+
+Luego clasificaremos estas variables por escalas, agruparemos las numéricas y enterios por un lado, luego las nominales y ordinales por otro lado.  
+
+
+```{r, echo=FALSE}
+tipoDatos <- sapply(student_scores, class) # Saber los tipos de datos
+continuas <-  which(tipoDatos == "numeric") # continuas
+enteras <- which(tipoDatos == "integer") # enteras
+numericas <- c(continuas,enteras)
+
+nominales <- which( tipoDatos == "factor") # categoricas
+ordinales <- which( sapply(student_scores, is.ordered) )  # ordinales
+categoricas <- c(nominales, ordinales)
+```
+
+
+
+Ya que realizamos una inspección básica a las columnas de la base de datos, el tipo de dato, así como sus estadísticos principales lo que sigue será definir otras 2 variables donde tomaremos las columnas de las calificaciones de los alumnos y otra con la variable dependiente para hacer el modelo de regresión.
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+vars_predict <- c('math_score','history_score','physics_score',"chemistry_score","biology_score","english_score","geography_score")  #covariables
+dependiente <- "weekly_self_study_hours" #variable explicada o dependiente
+```
+
+
+
+Con las nuevas variables definidas haremos un análisis exploratorio para ver si no tendremos problemas de escalas con los datos, outliers, NA´s, etc. Algo que debemos mencionar es que con la variable vars_predict donde guardamos las calificaciones de los alumnos no tendremos problemas de escala ya que las calificaciones por alumno se encuentran definidas con el mismo rango escalar de 0 a 100. 
+
+
+En los siguientes histogramas con BoxPlot y densidad combinados, podemos observar algunos comportamientos de las variables explicativas. Por ejemplo math_score tiene una asimetría hacia la izquierda (o negativa), mostrando varios outliers por debajo del primer cuantil. Por otro lado, geography_score muestra un comportamiento más uniforme, con mayor simetría y sin outliers. 
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+multi.hist(student_scores[, vars_predict]) # Histogramas con formato de funciones.R
+```
+
+
+
+
+En las siguientes gráficas de dispersión entre las covariables, podemos observar que no hay relaciones lineales evidentes entre éstas. 
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+pairs(student_scores[,vars_predict])
+```
+
+
+En las siguientes gráficas de dispersión individuales, no se muestra algún comportamiento, tendencia o patrón definido. 
+
+
+
+```{r, echo=FALSE}
+#par(mfrow = c(3, 3))
+plot(student_scores$math_score,col="red",main = "Calificaciones en Matematicas",ylab = "Score")
+plot(student_scores$history_score,col="blue",main = "Calificaciones Historia",ylab = "Score")
+plot(student_scores$physics_score,col="cyan",main = "Calificaciones Fisica",ylab = "Score")
+plot(student_scores$chemistry_score,col="seagreen",main = "Calificaciones Quimica",ylab = "Score")
+plot(student_scores$biology_score,col="green",main = "Calificaciones Biologia",ylab = "Score")
+plot(student_scores$english_score,col="magenta",main = "Calificaciones Ingles",ylab = "Score")
+plot(student_scores$geography_score,col="orange",main = "Calificaciones Geografia",ylab = "Score")
+```
+
+
+
+En los siguientes BoxPlot parece no haber problemas de escala, y algunos aoutliers en las variables math_score y biology_score. 
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+par(bty = "n")
+boxplot(student_scores[,vars_predict],main = "Boxplot de variables predictoras",las = 3,cex=0.6,cex.main = 0.8,cex.axis = 0.55, col = "red", border = "black")
+
+```
+
+
+
+Del análisis exploratorio que hicimos podemos ver que en efecto no tenemos problemas de escala con las calificaciones, tenemos algunos valores outliers o  atípicos pero no es algo que nos genere problemas. 
+
+
+
+
+## 2. Determinar si existe multicolinealidad usando VIF o KMO.
+
+
+
+```{r, echo=FALSE}
+KMO(student_scores[,vars_predict])
+```
+
+De los resultados obtenidos de la prueba KMO tenemos que los valores son  mediocres o regulares para nuestras variables, pues están fuera del rango 0.8 a 1, donde la muestra sería adecuada para el análisis factorial. Sin embargo no son menores a 0.6, que indicaría que la muestra no es adecuada.  
+
+
+
+Por otro lado, podemos observar el factor de inflación de varianza y parece no haber multicolinealidad entre las covariables. 
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# definimos los datos que usara el modelo
+#variables originales
+datos <- student_scores[c(vars_predict, dependiente)]
+fit_model <- lm(weekly_self_study_hours ~., data = datos)
+colinearidad <- data.frame(Variance_Inflation_Factor = vif(fit_model));colinearidad
+```
+
+
+
+
+
+
+
+
+
+## 3. Componentes principales
+
+Ahora obtendremos las componentes principales de nuestras variables predictoras. Se observa que la proporción de varianza no se acumula rápidamente a 1, el primer componente tiene 0.23, y los primeros tres acumulan 0.52, es decir, la mitad. Hasta el quinto componente acumula 77%. 
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+comps <- princomp(student_scores[,vars_predict])
+summary(comps)
+```
+
+
+La matriz Gamma o de vectores propios es la siguiente. 
+
+
+```{r, echo=FALSE}
+#### loadings:  Matriz Gamma
+comps$loadings
+```
+
+
+La muestra aleatoria de las componentes principales es la siguiente, se muestran las primeras 10.
+
+
+```{r, echo=FALSE}
+#### scores: La muestra aleatoria de las ccomponentes ppales
+head(comps$scores, 10)
+```
+
+
+## 4. Distribucion Normal multivariado.
+
+
+Con las componentes obtenidas veremos si estas se distribuyen de forma normal multivariada con el Henze-Zirkler’s test y el método de detección de outliers quan que es un método cuantil basado en la distancia Mahalanobis. A continuación se muestra el Chi-Square Q-Q Plot generado. 
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#fit <- MVN::mvn(data = comps$scores, mvnTest = "hz", multivariateOutlierMethod = "quan") 
+scores_matrix<-as.matrix(comps$scores)
+scores_matrix<-as.data.frame(scores_matrix)
+names(scores_matrix)<-c("comp1", "comp2","comp3", "comp4" , "comp5","comp6", "comp7" )
+ajuste <- MVN::mvn(data = scores_matrix, mvnTest="hz", multivariateOutlierMethod="quan")
+```
+
+
+Observemos que el test de Henze-Zirkler rechaza que sea normal multivariado. 
+
+
+```{r, echo=FALSE}
+ajuste$multivariateNormality
+```
+
+
+Finalmente, el test de Anderson-Darling	muestra que para 5 de los 7 componentes no forman una normal multivariada, particularmente las primeras dos componentes que nos interesan. 
+
+
+```{r, echo=FALSE}
+ajuste$univariateNormality
+```
+
+
+
+
+
+
+
+## 5. Diagrama de Dispersion y proporción de varianza.
+
+
+Con la variable de scores obtenida del calculo de las componentes principales graficaremos un diagrama de dispersión tomando únicamente las primeras 2 componentes. Lo que podemos observar es que las primeras 2 componentes no están conservando mucha variabilidad de los datos originales. 
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+plot(comps$scores[,c(1,2)], col = "blue4", main = "Gráfico con 2 componentes")
+```
+
+
+Si graficamos los primeros tres componentes tenemos lo siguiente. 
+
+
+
+```{r, echo=FALSE}
+scatterplot3d(comps$scores[,c(1,3)], color="steelblue")
+```
+
+
+
+
+## 6. Biplot, agrupaciones y variables importantes.
+
+En la siguiente gráfica Biplot de los primeros dos componentes vemos las flechas que son las variables y los puntos numéricos que son las observaciones. El largo de las flechas indica la varianza, entre más largas mayor varianza. El coseno del ángulo entre las flechas aproxima la correlación entre las variables, entre más cercano a 90 o 270 grados menor correlación entre las variables, un ángulo de 0 o de 180 grados refleja correlación de 1 y -1 respectivamente. Observamos aquí las correlaciones entre las variables dentro de los componentes principales. 
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=7, fig.width=8}
+biplot(comps)
+```
+
+
+
+
+Por otro lado, podemos usar otro método, en el que en ncp indicamos el número de componentes principales que queremos, y con ello obtenemos un PCA graph, por una parte de observaciones y por otro de la variable, por separado.  
+
+
+```{r, echo=FALSE, fig.height=6, fig.width=6}
+pca_comps <- PCA(student_scores[,vars_predict],scale.unit = T, ncp = 3, graph = T) #FactoMineR package
+```
+
+
+
+Para determinar la importancia de cada componente con las variables originales usaremos la función cos2 la cual nos dice que un valor bajo significa que la variable no está perfectamente representada por esa componente, mientras que un valor alto significa que es una buena representación de esa varíable con esa componente. con Coseno 2 podemos observar la importancia de las variables en las primeras componentes principales. En este caso tenemos las correlaciones entre las variables y las componentes principales. 
+
+
+
+```{r, echo=FALSE}
+fviz_cos2(pca_comps,choice = "var",axes = 2)#factoextra package
+```
+
+
+Observando las dimensiones tenemos lo siguiente.
+
+
+
+```{r, echo=FALSE}
+pca_comps$desc <- dimdesc(pca_comps, axes = c(1,2), proba = 0.05)
+pca_comps$desc$Dim.1
+pca_comps$desc$Dim.2
+```
+
+
+
+
+
+Otra forma de visualizar esto es combinar el biplot y la importancia de las componentes en el que los atributos con puntuaciones cos2 similares tendrán colores similares. 
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+
+fviz_pca_var(comps, col.var = "cos2",                        #replicar esta grafica con pca_comps en lugar 
+                                                            #del parametro comps.
+            gradient.cols = c("black", "orange", "green"),
+            repel = TRUE)
+```
+
+
+
+
+## 7. Regresión lineal múltiple. Modelo predictivo. 
+
+Como ultimo paso ajustaremos un modelo de regresión usando las variables que definimos al principio donde tomamos las calificaciones y la variable que nos interesa modelar. 
+
+
+Se muestra a continuación el factor de inflación de varianza para un modelo de regresión con datos originales, todos son cercanos a 1 por lo que no parece haber problemas de multicolinealidad. 
+
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# definimos los datos que usara el modelo
+#variables originales
+datos <- student_scores[c(vars_predict, dependiente)]
+fit_model <- lm(weekly_self_study_hours ~., data = datos)
+colinearidad <- data.frame(Variance_Inflation_Factor = vif(fit_model));colinearidad
+```
+
+
+A continuación se muestra el summary del modelo ajustado con los datos originales. 
+
+
+```{r, echo=FALSE}
+summary(fit_model)
+```
+
+
+
+A continuación mostramos el factor de inflación de varianza para un modelo de regresión con componentes principales, todos son  1 por lo que no hay problemas de multicolinealidad. 
+
+
+
+```{r, echo=FALSE}
+#componentes principales
+data2 <- cbind(student_scores[,dependiente],comps$scores)
+colnames(data2) <- c('weekly_self_study_hours','comp1','comp2','comp3','comp4','comp5','comp6','comp7')
+data2<-as.data.frame(data2)
+fit_model2 <- lm(weekly_self_study_hours ~., data = data2)
+colinearidad_check <- data.frame(Variance_Inflation_Factor = vif(fit_model2)); colinearidad_check
+```
+
+
+A continuación se presenta el summary del modelo ajustando con los componentes principales. 
+
+```{r, echo=FALSE}
+summary(fit_model2)
+```
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,119 @@
+---
+title: "tarea"
+output: html_document
+date: "2024-04-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("../../utilerias/funciones.R")
+```
+
+```{r}
+library(tidyverse)
+library(caret)
+library(car)
+library(MASS)
+library(factoextra)
+library(FactoMineR)
+library(repr)
+library(psych)
+```
+
+
+
+```{r}
+datos <- read.csv("/home/radix/Taller/Statistical Learning/Datos/student-scores/student-scores.csv")
+```
+
+# Escalas
+```{r}
+tipoDatos <- sapply(datos, class) # Saber los tipos de datos
+continuas <-  which(tipoDatos == "numeric") # continuas
+enteras <- which(tipoDatos == "integer") # enteras
+numericas <- c(continuas,enteras)
+
+nominales <- which( tipoDatos == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+categoricas <- c(nominales, ordinales)
+```
+
+```{r}
+predictoras <-c('math_score',	'history_score',	'physics_score',	'chemistry_score',	'biology_score',	'english_score',	'geography_score')
+
+tarjet <- "weekly_self_study_hours"
+```
+
+# Exploratorio
+```{r}
+multi.hist(datos[, predictoras]) # Histogramas
+pairs(datos[, predictoras]) # Dispersiones
+
+# Grafico de Caja y Bigotes
+par(bty = "n")
+boxplot(datos[, predictoras], main="Grafico de caja y bigotes",  
+        las = 2, cex=0.4, cex.main=1, cex.axis = 0.7, col = "sky blue", border= "black");grid()
+datos[, predictoras]
+```
+
+
+```{r}
+KMO(datos[, predictoras])
+```
+
+0,90 > KMO Muy bueno 0,90 > KMO > 0,80 Bueno 0,80 > KMO > 0,70 Aceptable 0,70 > KMO > 0,60 Mediocre o regular 0,60 > KMO > 0,50 Malo 0,50 > KMO Inaceptable o muy malo Autovalores y autovectores de la matriz de covarianzas de la muestra
+
+# Componentes principales
+```{r}
+predictoras.princomp <- princomp(datos[,predictoras])
+predictoras.princomp$loadings # Matriz Gamma
+predictoras.princomp$scores # La muestra aleatoria de las ccomponentes ppales
+summary(predictoras.princomp)
+
+```
+
+# Distribuyen Normal
+```{r}
+ajuste <- MVN::mvn(data = as.matrix(predictoras.princomp$scores), mvnTest="hz", multivariateOutlierMethod="quan")
+```
+
+```{r}
+plot(predictoras.princomp$scores[, c(1,2)])
+```
+
+```{r}
+biplot(predictoras.princomp)
+```
+
+```{r}
+obj.PCA <- PCA(datos[, predictoras], scale.unit = TRUE, ncp = 3, graph = TRUE)
+fviz_cos2(obj.PCA, choice = "var", axes = 2)
+obj.PCA$desc <- dimdesc(obj.PCA, axes = c(1,2), proba = 0.05)
+obj.PCA$desc$Dim.1
+obj.PCA$desc$Dim.2
+```
+
+# Modelo predictivo
+```{r}
+
+data <- datos[,c(tarjet,predictoras) ]
+
+# En cuanto a variables originales
+model_linear <- lm(weekly_self_study_hours~.,data=data)
+collinearity_check <- data.frame(Variance_Inflation_factor=vif(model_linear));collinearity_check
+
+data <- cbind(datos[,tarjet],predictoras.princomp$scores)
+
+colnames(data) <- c("weekly_self_study_hours", "comp1", "comp2","comp3","comp4","comp5","comp6","comp7")
+# En cuanto a variables con componentes principales ??????????
+model_linear <- lm(weekly_self_study_hours~., data=data)
+collinearity_check <- data.frame(Variance_Inflation_factor=vif(model_linear));collinearity_check
+
+
+```
+
+
+
