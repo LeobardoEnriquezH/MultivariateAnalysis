@@ -102,7 +102,8 @@ En los siguientes histogramas con BoxPlot y densidad combinados, podemos observa
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
+par(mfrow = c(2, 2))
 multi.hist(student_scores[, vars_predict]) # Histogramas con formato de funciones.R
 ```
 
@@ -112,7 +113,7 @@ multi.hist(student_scores[, vars_predict]) # Histogramas con formato de funcione
 En las siguientes gráficas de dispersión entre las covariables, podemos observar que no hay relaciones lineales evidentes entre éstas. 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
 pairs(student_scores[,vars_predict])
 ```
 
@@ -121,8 +122,8 @@ En las siguientes gráficas de dispersión individuales, no se muestra algún co
 
 
 
-```{r, echo=FALSE}
-#par(mfrow = c(3, 3))
+```{r, echo=FALSE, fig.height=6, fig.width=6}
+par(mfrow = c(2, 2))
 plot(student_scores$math_score,col="red",main = "Calificaciones en Matematicas",ylab = "Score")
 plot(student_scores$history_score,col="blue",main = "Calificaciones Historia",ylab = "Score")
 plot(student_scores$physics_score,col="cyan",main = "Calificaciones Fisica",ylab = "Score")
@@ -138,7 +139,7 @@ En los siguientes BoxPlot parece no haber problemas de escala, y algunos aoutlie
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
 par(bty = "n")
 boxplot(student_scores[,vars_predict],main = "Boxplot de variables predictoras",las = 3,cex=0.6,cex.main = 0.8,cex.axis = 0.55, col = "red", border = "black")
 
@@ -277,7 +278,7 @@ En la siguiente gráfica Biplot de los primeros dos componentes vemos las flecha
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=7, fig.width=8}
+```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=7, fig.width=6}
 biplot(comps)
 ```
 
@@ -288,6 +289,7 @@ Por otro lado, podemos usar otro método, en el que en ncp indicamos el número 
 
 
 ```{r, echo=FALSE, fig.height=6, fig.width=6}
+par(mfrow = c(1, 2))
 pca_comps <- PCA(student_scores[,vars_predict],scale.unit = T, ncp = 3, graph = T) #FactoMineR package
 ```
 
