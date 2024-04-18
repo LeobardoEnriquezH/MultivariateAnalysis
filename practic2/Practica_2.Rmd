@@ -48,7 +48,7 @@ pacman::p_load(tidyverse,
 
 
 ```{r, echo=FALSE}
-source("funciones.R") #funciones auxiliares prediseñadas
+source("funciones.R") #funciones auxiliares prediseñadas por el profesor
 ```
 
 
@@ -62,25 +62,25 @@ Utilizando la base de datos Student-Scores y con las columnas de las calificacio
 Antes de comenzar cargamos la base de datos que vamos a utilizar y hacemos una inspección rápida del tipo de datos para cada variable y de la estadística descriptiva de los datos numéricos.  
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r, echo=TRUE, message=FALSE,warning=FALSE}
 #Cargamos la base de datos 
-student_scores <- read.csv("DataSets/student-scores.csv") #con read_csv no reconoce como numéricos
-summary(student_scores) #Estadística descriptiva de los datos
+student_scores <- read.csv("DataSets/student-scores.csv")
+summary(student_scores) #Estadística descriptiva de los datos numéricos
 ```
 
 
 Luego clasificaremos estas variables por escalas, agruparemos las numéricas y enterios por un lado, luego las nominales y ordinales por otro lado.  
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 tipoDatos <- sapply(student_scores, class) # Saber los tipos de datos
 continuas <-  which(tipoDatos == "numeric") # continuas
 enteras <- which(tipoDatos == "integer") # enteras
-numericas <- c(continuas,enteras)
+numericas <- c(continuas,enteras) #unirlas
 
 nominales <- which( tipoDatos == "factor") # categoricas
 ordinales <- which( sapply(student_scores, is.ordered) )  # ordinales
-categoricas <- c(nominales, ordinales)
+categoricas <- c(nominales, ordinales) #unirlas
 ```
 
 
@@ -88,8 +88,9 @@ categoricas <- c(nominales, ordinales)
 Ya que realizamos una inspección básica a las columnas de la base de datos, el tipo de dato, así como sus estadísticos principales lo que sigue será definir otras 2 variables donde tomaremos las columnas de las calificaciones de los alumnos y otra con la variable dependiente para hacer el modelo de regresión.
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
-vars_predict <- c('math_score','history_score','physics_score',"chemistry_score","biology_score","english_score","geography_score")  #covariables
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
+vars_predict <- c('math_score','history_score','physics_score',"chemistry_score",
+                  "biology_score","english_score","geography_score")  #covariables
 dependiente <- "weekly_self_study_hours" #variable explicada o dependiente
 ```
 
@@ -102,7 +103,7 @@ En los siguientes histogramas con BoxPlot y densidad combinados, podemos observa
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
+```{r,echo=TRUE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
 par(mfrow = c(2, 2))
 multi.hist(student_scores[, vars_predict]) # Histogramas con formato de funciones.R
 ```
@@ -113,7 +114,7 @@ multi.hist(student_scores[, vars_predict]) # Histogramas con formato de funcione
 En las siguientes gráficas de dispersión entre las covariables, podemos observar que no hay relaciones lineales evidentes entre éstas. 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
+```{r,echo=TRUE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
 pairs(student_scores[,vars_predict])
 ```
 
@@ -122,7 +123,7 @@ En las siguientes gráficas de dispersión individuales, no se muestra algún co
 
 
 
-```{r, echo=FALSE, fig.height=6, fig.width=6}
+```{r, echo=TRUE, fig.height=6, fig.width=6}
 par(mfrow = c(2, 2))
 plot(student_scores$math_score,col="red",main = "Calificaciones en Matematicas",ylab = "Score")
 plot(student_scores$history_score,col="blue",main = "Calificaciones Historia",ylab = "Score")
@@ -139,7 +140,7 @@ En los siguientes BoxPlot parece no haber problemas de escala, y algunos aoutlie
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
+```{r,echo=TRUE,message=FALSE,warning=FALSE, fig.height=6, fig.width=6}
 par(bty = "n")
 boxplot(student_scores[,vars_predict],main = "Boxplot de variables predictoras",las = 3,cex=0.6,cex.main = 0.8,cex.axis = 0.55, col = "red", border = "black")
 
@@ -156,7 +157,7 @@ Del análisis exploratorio que hicimos podemos ver que en efecto no tenemos prob
 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 KMO(student_scores[,vars_predict])
 ```
 
@@ -167,7 +168,7 @@ De los resultados obtenidos de la prueba KMO tenemos que los valores son  medioc
 Por otro lado, podemos observar el factor de inflación de varianza y parece no haber multicolinealidad entre las covariables. 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
 # definimos los datos que usara el modelo
 #variables originales
 datos <- student_scores[c(vars_predict, dependiente)]
@@ -188,7 +189,7 @@ colinearidad <- data.frame(Variance_Inflation_Factor = vif(fit_model));colineari
 Ahora obtendremos las componentes principales de nuestras variables predictoras. Se observa que la proporción de varianza no se acumula rápidamente a 1, el primer componente tiene 0.23, y los primeros tres acumulan 0.52, es decir, la mitad. Hasta el quinto componente acumula 77%. 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
 comps <- princomp(student_scores[,vars_predict])
 summary(comps)
 ```
@@ -197,7 +198,7 @@ summary(comps)
 La matriz Gamma o de vectores propios es la siguiente. 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 #### loadings:  Matriz Gamma
 comps$loadings
 ```
@@ -206,7 +207,7 @@ comps$loadings
 La muestra aleatoria de las componentes principales es la siguiente, se muestran las primeras 10.
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 #### scores: La muestra aleatoria de las ccomponentes ppales
 head(comps$scores, 10)
 ```
@@ -219,7 +220,7 @@ Con las componentes obtenidas veremos si estas se distribuyen de forma normal mu
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
 #fit <- MVN::mvn(data = comps$scores, mvnTest = "hz", multivariateOutlierMethod = "quan") 
 scores_matrix<-as.matrix(comps$scores)
 scores_matrix<-as.data.frame(scores_matrix)
@@ -231,7 +232,7 @@ ajuste <- MVN::mvn(data = scores_matrix, mvnTest="hz", multivariateOutlierMethod
 Observemos que el test de Henze-Zirkler rechaza que sea normal multivariado. 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 ajuste$multivariateNormality
 ```
 
@@ -239,7 +240,7 @@ ajuste$multivariateNormality
 Finalmente, el test de Anderson-Darling	muestra que para 5 de los 7 componentes no forman una normal multivariada, particularmente las primeras dos componentes que nos interesan. 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 ajuste$univariateNormality
 ```
 
@@ -256,7 +257,7 @@ Con la variable de scores obtenida del calculo de las componentes principales gr
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
 plot(comps$scores[,c(1,2)], col = "blue4", main = "Gráfico con 2 componentes")
 ```
 
@@ -265,7 +266,7 @@ Si graficamos los primeros tres componentes tenemos lo siguiente.
 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 scatterplot3d(comps$scores[,c(1,3)], color="steelblue")
 ```
 
@@ -278,7 +279,7 @@ En la siguiente gráfica Biplot de los primeros dos componentes vemos las flecha
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE, fig.height=7, fig.width=6}
+```{r,echo=TRUE,message=FALSE,warning=FALSE, fig.height=7, fig.width=6}
 biplot(comps)
 ```
 
@@ -288,7 +289,7 @@ biplot(comps)
 Por otro lado, podemos usar otro método, en el que en ncp indicamos el número de componentes principales que queremos, y con ello obtenemos un PCA graph, por una parte de observaciones y por otro de la variable, por separado.  
 
 
-```{r, echo=FALSE, fig.height=6, fig.width=6}
+```{r, echo=TRUE, fig.height=6, fig.width=6}
 par(mfrow = c(1, 2))
 pca_comps <- PCA(student_scores[,vars_predict],scale.unit = T, ncp = 3, graph = T) #FactoMineR package
 ```
@@ -299,7 +300,7 @@ Para determinar la importancia de cada componente con las variables originales u
 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 fviz_cos2(pca_comps,choice = "var",axes = 2)#factoextra package
 ```
 
@@ -308,7 +309,7 @@ Observando las dimensiones tenemos lo siguiente.
 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 pca_comps$desc <- dimdesc(pca_comps, axes = c(1,2), proba = 0.05)
 pca_comps$desc$Dim.1
 pca_comps$desc$Dim.2
@@ -322,9 +323,9 @@ Otra forma de visualizar esto es combinar el biplot y la importancia de las comp
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
 
-fviz_pca_var(comps, col.var = "cos2",                        #replicar esta grafica con pca_comps en lugar 
+fviz_pca_var(comps, col.var = "cos2",   #replicar esta grafica con pca_comps en lugar 
                                                             #del parametro comps.
             gradient.cols = c("black", "orange", "green"),
             repel = TRUE)
@@ -343,7 +344,7 @@ Se muestra a continuación el factor de inflación de varianza para un modelo de
 
 
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
 # definimos los datos que usara el modelo
 #variables originales
 datos <- student_scores[c(vars_predict, dependiente)]
@@ -355,7 +356,7 @@ colinearidad <- data.frame(Variance_Inflation_Factor = vif(fit_model));colineari
 A continuación se muestra el summary del modelo ajustado con los datos originales. 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 summary(fit_model)
 ```
 
@@ -365,7 +366,7 @@ A continuación mostramos el factor de inflación de varianza para un modelo de 
 
 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 #componentes principales
 data2 <- cbind(student_scores[,dependiente],comps$scores)
 colnames(data2) <- c('weekly_self_study_hours','comp1','comp2','comp3','comp4','comp5','comp6','comp7')
@@ -377,7 +378,7 @@ colinearidad_check <- data.frame(Variance_Inflation_Factor = vif(fit_model2)); c
 
 A continuación se presenta el summary del modelo ajustando con los componentes principales. 
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 summary(fit_model2)
 ```
 
