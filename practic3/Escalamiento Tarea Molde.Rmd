@@ -1,0 +1,253 @@
+---
+title: "Escalamiento no metrico"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerias necesarias
+```{r}
+library(car)
+library(smacof)
+library(cluster)
+library(lubridate)
+source("utilerias/funciones.R")
+```
+
+# Indicaciones:
+
+Utiliza el siguiente analisis para despues hacer tu propio analisis, seleccionando la mejor dimension con los ratings(columnas 5:18) de la db RockHard del paquete smacof.
+
+# Sinapsis
+
+El escalamiento multidimensional no métrico tiene por objetivo preservar las disimilaridades mientras se posicionan los objetos en una menor dimension. Se aplica principalmente sobre datos ordinales o ratings.
+
+Pasos escenciales:
+
+0.- Preprocesamiento(Datos, atípicos, escalamiento, transformaciones)
+
+1.- Matriz de datos con escala ordinales(Definir rangos)
+
+2.- Cálculo de disimilaridades
+
+4.- Escalamiento no métrico (Regresión monótona)
+
+5.- Mejoras
+
+
+## Carga de la informacion
+
+Práctica sobre el Indice de Rezago Social en Mexico
+
+Variables: Indices
+
+```{r}
+data <- read.csv("Indica.csv")
+```
+
+
+# Formato Correcto
+
+```{r}
+rownames(data) <- data$Entidad.Federativa # Estableciendo como indice las entidades
+data$Entidad.Federativa <- NULL # Estableciendo como indice las entidades
+
+# Establecimiendo de escalas ordinales
+data$Grado.de.rezago.social <- factor(data$Grado.de.rezago.social, levels= c("Muy bajo", "Bajo","Medio","Alto","Muy alto"), order=TRUE)
+```
+
+# Seleccion de las columnas auxiliares y de analisis.
+
+La informacion debe ser suministrada por el dueño de los datos. Por ejemplo definir el
+comportamiento del índice de rezago
+
+```{r}
+auxiliares <- colnames(data[, c(2,15)])
+analisis <- colnames(data[,3:12]) # Seleccion de columnas
+columnas <- c(auxiliares, analisis)
+datos <- data[, columnas] # Extraccion
+```
+
+
+# Escalas Iniciales
+
+```{r}
+# Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categóricas
+nominales <- which( tipo == "factor") # categóricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+# Descriptivos Multivariados
+
+* Identificar Atipicos
+
+* Problemas de escala
+
+* Distribuciones
+
+```{r}
+# Histogramas
+multi.hist(datos[, numericas])
+
+# Boxplot
+boxplot(datos, main="Caja y Bigotes",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+
+# Andrews ##CORREGIR!!!
+#andrews(df = datos, type=2, bty = "n", ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" ); grid()
+
+```
+
+# Eliminacion de datos atipicos
+
+* Importante ver que la variable auxiliar ayuda a identificar observaciones que afecten el análisis.
+
+```{r}
+outliers <- boxplot(datos$Poblacion.Total)$out
+elementos <- which(datos$Poblacion.Total %in% outliers)
+
+datos <- datos[-union(elementos,elementos), ]
+```
+
+# Escalamiento
+
+Iportante que los indices se recodifican a una escala ordinal, pero primero se normalizan ya que se trata de un indice.
+
+```{r}
+# Normalizacion
+datos[,analisis] <- sapply(datos[, analisis], function(data){
+         (data - min(data)) / (max(data) - min(data))})
+# Boxplot
+boxplot(datos[, analisis], main="Caja y Bigotes",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+```
+
+# 1 Matriz de datos con escala ordinales
+
+Definicion de rangos para la escala de lickert
+
+0-20 -> 1
+21:40 -> 2
+40:60 -> 3
+61:80 -> 4
+81:100 -> 5
+
+```{r}
+# Transformacion a escala ordinal
+datos[, analisis] <- datos[, analisis]*100
+datos[, analisis] <- round(datos[, analisis])
+
+for(indice in analisis){
+  for(n in 1:nrow(datos)){
+    datos[n,indice] = recode(datos[n,indice], "0:20=1; 21:40=2; 41:60=3; 61:80=4; 81:100=5")
+  }
+} 
+
+# Formato Correcto
+for(indice in analisis){
+  datos[, indice] <- factor(datos[, indice], order = TRUE)
+}
+
+# Redefinicion de Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+# Calculo de la matriz de Disimilaridad
+
+* Como las variables son en escala ordinal, ent se utiliza distancia gower(mixtas).
+
+```{r}
+gower_dist <- daisy(datos[, analisis], metric = "gower")
+```
+
+# Escalamiento no métrico
+
+* Métricas de ajuste: stress con valor entre [0,1] y entre mas pequeño mejor. Y rss; entre
+mas pequeño mejor. En este caso, a prueba y error se encontro que 7 es la mejor dimensión.
+
+
+```{r}
+fit.datos <- smacofSym(gower_dist, type = "ordinal", ndim = 7)
+fit.datos$stress
+fit.datos$rss
+
+# Dispersion
+plot(fit.datos, plot.dim = c(1,2), main = "Escalamiento Multidimensional No metrico", 
+     xlab="Dim 1", ylab="Dim 2", cex=0.5, cex.main=1, 
+      bty = "n",  col = datos$Grado.de.rezago.social );grid()
+
+# Curva Shape
+plot(fit.datos, plot.type = "Shepard", main="Curva Shepard",
+     xlab="Distancias observadas", ylab="Configuracion de distancias", cex=0.5, cex.main=1,
+     col="skyblue", bty = "n");grid()
+```
+# Mejoras
+
+Para mejorar el ajuste, se puede intentar los siguiente:
+
+1. Incrementar el numero de dimensiones(Capturar mayor variabilidad que implica menor rss)
+
+2. Usar otra medida de disimilaridad
+
+3. Usar otro algoritmo de optimizacion para el escalamiento
+
+4. Problemas de preprocesamiento
+
+5. Usar otro metodo como t-sne
+
+# Implementación de t-sne
+
+```{python Modulos}
+from sklearn.manifold import TSNE
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+```
+
+# Implementacion
+```{python Datos ~> Variables suplementarias}
+# Datos
+datos = r.datos
+
+# Particion horizontal
+x = np.array(datos[r.analisis])
+y = np.array(datos[r.auxiliares[1]]) # Variable suplementaria
+```
+
+# Ajuste
+```{python Variables ~> t-SNE}
+x_coord = TSNE(n_components = 3, perplexity = 30, n_iter = 4000).fit_transform(x)
+```
+
+# Grafico
+```{python t-SNE Grafico}
+plt.clf()
+sns.set(style="whitegrid")
+sns.relplot(x=x_coord[:,0], y=x_coord[:,1], hue=y, palette="muted" )
+plt.show()
+exit
+```
+

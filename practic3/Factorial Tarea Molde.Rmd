@@ -1,0 +1,225 @@
+---
+title: "Escalamiento no metrico"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerias necesarias
+```{r}
+library(psych)
+source("utilerias/funciones.R")
+library(andrews)
+library(dplyr)
+```
+
+# Indicaciones:
+Utiliza el siguiente analisis para despues hacer tu propio analisis, determinando los perfiles de compra con los datos de Camapña de marketing(anexo) usando las columnas de compras 10:15.
+
+# Sinapsis
+Analisis Factorial Exploratorio establece variables latentes tales que:
+* No correlacionadas
+* Explica la variabilidad posible por factores comunes y singulares
+* Clusterizacion de variables
+* Interpretacion a travez de las nuevas variables latentes
+
+Pasos escenciales:
+0.- Preprocesamiento(Datos, atipicos, escalamiento, transformaciones, supuesto de Normalidad)
+1.- Determinacion de la matriz de correlacion
+2.- Determinacion del numero de factores
+4.- Seleccion del metodo de Ajuste(PCA o MV) sin rotacion
+5.- Rotaciones
+6.- Mejoras
+
+## Carga de la informacion
+Practica sobre el Indice de Rezago Social en Mexico
+Variables: Indices
+```{r}
+data <- read.csv("Indica.csv")
+```
+
+# Formato Correcto
+```{r}
+rownames(data) <- data$Entidad.Federativa # Estableciendo como indice las entidades
+data$Entidad.Federativa <- NULL # Estableciendo como indice las entidades
+
+# Establecimiendo de escalas ordonales
+data$Grado.de.rezago.social <- factor(data$Grado.de.rezago.social, levels= c("Muy bajo", "Bajo","Medio","Alto","Muy alto"), order=TRUE)
+```
+
+# Seleccion de las columnas auxiliares y de analisis.
+La informacion debe ser suministrada por el dueño de los datos. Por ejemplo definir el
+comportamiento del indice de rezago
+```{r}
+auxiliares <- colnames(data[, c(2,15)])
+analisis <- colnames(data[,3:12]) # Seleccion de columnas
+columnas <- c(auxiliares, analisis)
+datos <- data[, columnas] # Extraccion
+```
+
+# Escalas Iniciales
+```{r}
+# Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+# Descriptivos Multivariados
+* Identificar Atipicos
+* Problemas de escala
+* Distribuciones
+```{r}
+# Histogramas
+multi.hist(datos[, numericas])
+
+# Boxplot
+boxplot(datos, main="Caja y Bigotes",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+
+# Andrews
+andrews(df = datos, type=2, bty = "n", 
+        ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" );grid()
+```
+
+# Eliminacion de datos atipicos
+* Importante ver que la variable auxiliar ayuda a identificar observaciones q afecten el analisis
+```{r}
+outliers <- boxplot(datos$Poblacion.Total)$out
+elementos <- which(datos$Poblacion.Total %in% outliers)
+
+datos <- datos[-union(elementos,elementos), ]
+```
+
+# Escalamiento
+Iportante que los indices se recodifican a una escala ordinal, pero primero se normalizan ya
+que se trata de un indice
+```{r}
+# Normalizacion
+datos[,analisis] <- sapply(datos[, analisis], function(data){
+         (data - min(data)) / (max(data) - min(data))})
+# Boxplot
+boxplot(datos[, analisis], main="Caja y Bigotes",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+```
+
+# 1 Matriz de datos con escala ordinales
+Definicion de rangos para la escala de lickert
+0-20 -> 1
+21:40 -> 2
+40:60 -> 3
+61:80 -> 4
+81:100 -> 5
+```{r}
+# Transformacion a escala ordinal
+datos[, analisis] <- datos[, analisis]*100
+datos[, analisis] <- round(datos[, analisis])
+
+for(indice in analisis){
+  for(n in 1:nrow(datos)){
+    datos[n,indice] = recode(datos[n,indice], "0:20=1; 21:40=2; 41:60=3; 61:80=4; 81:100=5")
+  }
+} 
+
+# Formato Correcto
+for(indice in analisis){
+  datos[, indice] <- factor(datos[, indice], order = TRUE)
+}
+
+# Redefinicion de Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+# Seleccion de la matriz de correlacion
+* Como las variables son en escala ordinal provenientes de rangos, se utilizara la correlacion Spearman.
+```{r}
+# Formato Correcto para R.
+for(indice in analisis){
+  datos[, indice] <- as.integer(datos[, indice])
+}
+
+# Correlacion
+R <- cor(datos[, analisis], method = "spearman")
+```
+
+# Adecuacion de la muestra
+0,90 > KMO Muy bueno 
+0,90 > KMO > 0,80 Bueno 
+0,80 > KMO > 0,70 Aceptable 
+0,70 > KMO > 0,60 Mediocre o regular 
+0,60 > KMO > 0,50 Malo 
+0,50 > KMO Inaceptable o muy malo
+
+```{r}
+# Prueba de Bartlet Ho: R = I
+p_esf <- cortest.bartlett(R, 200)
+p_esf$p < 0.05
+
+# Prueba de KMO
+pruebaKMO <- KMO(R)
+```
+
+# Determinacion del numero de factores
+* Scree Plot: Num de factores = Numero de valores propios arriba de 1
+* Paralelo: Numero de factores por arriba del esperado simulado
+
+```{r}
+parallel <- fa.parallel(R, fm="pa", fa='fa') # Paralelo, Componentes principales, sin rotacion
+scree(datos[, analisis]);grid() # Scree
+```
+
+# Seleccion del metodo de Ajuste(PCA o MV)
+```{r}
+k <- 2 # Numero de factores
+ajuste <- fa(R, nfactors = k, rotate = "none", fm="pa")
+print(ajuste, digits=2, cutoff=0.3, sort=TRUE)
+ajuste$loadings # Cargas estimadas
+fa.diagram(ajuste)
+```
+
+# Rotacion
+La rotacion se aprecia bajo el dueño de los datos. Un criterio incial varimax es q mejoran
+las correlaciones.
+```{r}
+ajuste_varimax <- fa(R, nfactors = k, rotate = "varimax", fm="pa")
+print(ajuste, digits=2, cutoff=0.3, sort=TRUE)
+ajuste_varimax$loadings # Cargas estimadas
+fa.diagram(ajuste_varimax)
+```
+
+
+# Mejoras
+
+Para mejorar el ajuste en factorial exploratorio, se puede intentar los siguiente:
+
+1. Tener una mejor seleccion de las variables en su contexto inicial
+
+2. Usar otro algoritmo de optimizacion ademas de PCA o MV
+
+4. Problemas de preprocesamiento
+
+5. Identificar correctamente las escalas y de ahi la correlacion
+
+6.- Problema de interpretacion; seleccionar otro tipo de rotacion
+
