@@ -1,0 +1,428 @@
+---
+title: "Escalamiento no métrico"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerias necesarias
+```{r}
+library(car)
+library(smacof)
+library(cluster)
+library(lubridate)
+library(andrews)
+library(dplyr)
+library(corrplot)
+source("utilerias/funciones.R")
+```
+
+
+# Introducción:
+
+Se hace un análisis de escalamiento multidimensional, seleccionaremos la mejor dimensión con los ratings(columnas 5:18) de la base de datos ``RockHard`` del paquete ``smacof``. Los datos son de la revista RockHard, una revista alemana de heavy metal, los redactores valoran cada mes alrededor de 50 discos en una escala de (0... peor a 10... mejor), el conjunto de datos contiene todas las calificaciones de 2013. Los evaluadores en las columnas, y las bandas/álbumes en las filas.
+
+# Sinapsis
+
+El escalamiento multidimensional no métrico tiene por objetivo preservar las disimilaridades mientras se posicionan los objetos en una menor dimension. Se aplica principalmente sobre datos ordinales o ratings. 
+
+Pasos escenciales:
+
+0.- Preprocesamiento(Datos atípicos, escalamiento, transformaciones)
+
+1.- Matriz de datos con escala ordinales (Definir rangos)
+
+2.- Cálculo de disimilaridades
+
+4.- Escalamiento no métrico (Regresión monótona)
+
+5.- Mejoras
+
+
+
+## Carga de la informacion
+
+Práctica sobre el los ratings de bandas y álbunes de música de la revista RockHard para los 12 meses del año 2013, un album por cada banda. 
+
+
+Variables: Indices o ratings dados por 14 personas: Gotz, Thomas, Frank, Bjorn, Jan, Boris, Himmelstein, Michael, Jens, Ronny, Felix, Jakob, Marcus y Jenny. 
+
+Mostramos los primeros 10 banda y album.
+
+
+```{r}
+data1 <- smacof::RockHard
+head(data1, 10)
+```
+
+
+
+# Formato Correcto
+
+Primero creamos la variable Band_Album y luego la establecemos como índice de la base de datos. Quitamos variables que no usaremos en el análisis. Se muestran las primeras 10 observaciones. 
+
+
+
+```{r}
+data1$Band_Album<-paste(data1$Band,"_",data1$Album)
+```
+
+
+
+```{r}
+rownames(data1) <- data1$Band_Album # Estableciendo como indice las bandas
+data1$Band_Album <- NULL # Estableciendo como indice las bandas
+data1 <- subset(data1, select = -c(Year, Month, Band, Album))
+head(data1)
+```
+
+
+
+
+# Seleccion de las columnas auxiliares y de analisis.
+
+En esta sección analizamos algunos datos y generaremos otros. Por ejemplo definimos la variable ``avrating`` del promedio de los ratings de todos los participantes. Como hay muchos valores faltantes (NA's), primero hacenmos una revisión general para cada participante. 
+
+
+Podemos observar en la siguiente salida que los participantes que tienen más del 50% de NA's, son Felix y Jenny que tienen 478 y 383 NA'S de las 576 observaciones de la base de datos, respectivamente.  
+
+
+```{r}
+sprintf("Gotz: %d de %d", sum(is.na(data1$Götz)),  576)
+sprintf("Thomas: %d de %d", sum(is.na(data1$Thomas)),  576)
+sprintf("Frank: %d de %d", sum(is.na(data1$Frank)),  576)
+sprintf("Björn: %d de %d", sum(is.na(data1$Björn)),  576)
+sprintf("Jan: %d de %d", sum(is.na(data1$Jan)),  576)
+sprintf("Boris: %d de %d", sum(is.na(data1$Boris)),  576)
+sprintf("Himmelstein: %d de %d", sum(is.na(data1$Himmelstein)),  576)
+sprintf("Michael: %d de %d", sum(is.na(data1$Michael)),  576)
+sprintf("Jens: %d de %d", sum(is.na(data1$Jens)),  576)
+sprintf("Ronny: %d de %d", sum(is.na(data1$Ronny)),  576)
+sprintf("Felix: %d de %d", sum(is.na(data1$Felix)),  576)
+sprintf("Jakob: %d de %d", sum(is.na(data1$Jakob)),  576)
+sprintf("Marcus: %d de %d", sum(is.na(data1$Marcus)),  576)
+sprintf("Jenny: %d de %d", sum(is.na(data1$Jenny)),  576)
+```
+
+
+
+
+Observemos en la siguiente tabla de correlaciones, que todas están en los mismos órdenes, por lo que tomaremos las primeras 7 variables y omitiremos las últimas 7, pues generan muchos problemas al tener NA's y excluirlas no afecta realmente las relaciones. 
+
+
+
+
+```{r}
+#cor(na.omit(data1))
+options(digits=2)
+cor(data1,  method = "pearson", use = "pairwise.complete.obs")
+```
+
+
+En la siguiente tabla se muestran estas mismas correlaciones para las variables elegidas (participantes). 
+
+```{r}
+data1<-subset(data1, select = -c(Michael, Jens, Ronny, Felix, Jakob, Marcus, Jenny))
+```
+
+
+```{r}
+#cor(na.omit(data1))
+options(digits=2)
+cor(data1,  method = "pearson", use = "pairwise.complete.obs")
+```
+
+
+
+
+
+
+Decidimos crear la variable ``avrating``, que es el promedio de todas las calificaciones asignadas por todos los 7 participantes, considerando que hay NA's.Además, generamos la variable ``grado``, que es el grado medido como bajo (0 a 4),  medio (4 a 6), alto (6 a 8) y muy alto (8 a 10). 
+
+
+
+
+```{r}
+data1$avrating <- rowMeans(data1[,1:7], na.rm=TRUE)
+```
+
+
+```{r}
+data1<-data1 %>% mutate(grado = case_when(avrating <= 4 ~ "Bajo", 
+                                   avrating <= 6 ~ "Medio",
+                                   avrating <= 8 ~ "Alto", 
+                                   avrating <= 10 ~ "Muy alto"))
+head(data1,10)
+```
+
+
+
+Estableceremos la escala ordinal para la variable de grado.
+
+
+```{r}
+# Establecimiendo de escalas ordinales
+data1$grado <- factor(data1$grado, levels= c("Bajo","Medio","Alto","Muy alto"), order=TRUE)
+```
+
+
+Luego indicamos las variables auxiliares, variables de análisis, y juntamos toda la información a utilizar en el análisis en una sola base de datos. 
+
+
+```{r}
+auxiliares <- colnames(data1[, c(8,9)])
+analisis <- colnames(data1[,1:7]) # Seleccion de columnas
+columnas <- c(auxiliares, analisis)
+datos <- data1[, columnas] # Extraccion
+```
+
+
+
+# Escalas Iniciales
+
+
+Verificamos y asignamos las escalas iniciales, y el tipo de variables entre numéricas contínuas y enteras, o categóricas nominales y otrdinales. 
+
+
+```{r}
+# Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categóricas
+nominales <- which( tipo == "factor") # categóricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+
+
+# Descriptivos Multivariados
+
+* Identificar Atípicos
+
+* Problemas de escala
+
+* Distribuciones
+
+
+A continuación mostramos los histogramas, de los ratings de cada uno de los 14 participantes.
+
+
+
+
+```{r}
+# Histogramas
+par(mfrow= c(2,2) )
+multi.hist(datos[, numericas])
+```
+
+En el siguiente BoxPlot no parece haber problemas de escala, por lo que usaremos los datos sin estandarizar.
+
+
+
+```{r}
+# Boxplot
+boxplot(datos, main="Caja y Bigotes",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+
+# Andrews ##CORREGIR!!!
+#andrews(df = datos, type=2, bty = "n", ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" ); grid()
+```
+
+
+
+
+# Eliminacion de datos atipicos
+
+* Importante ver que la variable auxiliar ayuda a identificar observaciones que afecten el análisis.
+
+En el siguiente BoxPlot se observan algunos outliers por debajo del primer quartil, sin embargo no quitaremos esta información porque quita representatividad a la clasificación de "bajo". 
+
+
+
+```{r}
+outliers <- boxplot(datos$avrating)$out
+elementos <- which(datos$avrating %in% outliers)
+
+#datos <- datos[-union(elementos,elementos), ]
+```
+
+
+
+# Escalamiento
+
+Iportante que los indices se recodifican a una escala ordinal, pero primero se normalizan ya que se trata de un indice.
+
+```{r}
+# Normalizacion
+datos[,analisis] <- sapply(datos[, analisis], function(data){
+         (data - min(data, na.rm = TRUE)) / (max(data, na.rm = TRUE) - min(data, na.rm = TRUE))})
+# Boxplot
+boxplot(datos[, analisis], main="Caja y Bigotes",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+```
+
+# 1 Matriz de datos con escala ordinales
+
+Definicion de rangos para la escala de lickert
+
+0-20 -> 1
+21:40 -> 2
+40:60 -> 3
+61:80 -> 4
+81:100 -> 5
+
+
+
+
+
+```{r}
+# Transformacion a escala ordinal
+datos[, analisis] <- datos[, analisis]*100
+datos[, analisis] <- round(datos[, analisis])
+
+for(indice in analisis){
+  for(n in 1:nrow(datos)){
+    datos[n,indice] = car::recode(datos[n,indice], "0:40=1; 41:60=2; 61:80=3; 81:100=4")
+  }
+} 
+
+# Formato Correcto
+for(indice in analisis){
+  datos[, indice] <- factor(datos[, indice], order = TRUE)
+}
+
+# Redefinicion de Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+fecha <- which(tipo == "Date") # Fecha
+categoricas <- names(c(nominales, ordinales, fecha))
+```
+
+
+
+
+
+
+# Calculo de la matriz de Disimilaridad
+
+* Como las variables son en escala ordinal, ent se utiliza distancia gower(mixtas).
+
+```{r}
+gower_dist <- daisy(datos[, analisis], metric = "gower")
+```
+
+
+
+
+# Escalamiento no métrico
+
+* Métricas de ajuste: En este caso, a prueba y error se encontro que 5 es la mejor dimensión. 
+
+Stress: con valor entre [0,1] y entre mas pequeño mejor. 
+
+RSS: entre mas pequeño mejor. 
+
+
+```{r}
+fit.datos <- smacofSym(gower_dist, type = "ordinal", ndim = 5)
+Stress<-fit.datos$stress
+sprintf("Stress: %f", Stress)
+RSS<-fit.datos$rss
+sprintf("RSS: %f", RSS)
+
+```
+
+
+
+
+```{r}
+# Dispersion
+plot(fit.datos, plot.dim = c(1,2), main = "Escalamiento Multidimensional No metrico", 
+     xlab="Dim 1", ylab="Dim 2", cex=0.5, cex.main=1, 
+      bty = "n",  col = datos$Grado.de.rezago.social );grid()
+```
+
+
+
+
+```{r}
+# Curva Shape
+plot(fit.datos, plot.type = "Shepard", main="Curva Shepard",
+     xlab="Distancias observadas", ylab="Configuracion de distancias", cex=0.5, cex.main=1,
+     col="skyblue", bty = "n");grid()
+```
+
+
+
+
+# Mejoras
+
+Para mejorar el ajuste, se puede intentar los siguiente:
+
+1. Incrementar el numero de dimensiones(Capturar mayor variabilidad que implica menor rss)
+
+2. Usar otra medida de disimilaridad
+
+3. Usar otro algoritmo de optimizacion para el escalamiento
+
+4. Problemas de preprocesamiento
+
+5. Usar otro metodo como t-sne
+
+# Implementación de t-sne
+
+```{python Modulos}
+from sklearn.manifold import TSNE
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+```
+
+# Implementacion
+
+```{python Datos  Variables suplementarias}
+# Datos
+datos = r.datos
+
+# Particion horizontal
+x = np.array(datos[r.analisis])
+y = np.array(datos[r.auxiliares[1]]) # Variable suplementaria
+```
+
+# Ajuste
+
+```{python Variables  t-SNE}
+x_coord = TSNE(n_components = 3, perplexity = 30, n_iter = 4000).fit_transform(x)
+```
+
+# Grafico
+
+```{python t-SNE Grafico}
+plt.clf()
+sns.set(style="whitegrid")
+sns.relplot(x=x_coord[:,0], y=x_coord[:,1], hue=y, palette="muted" )
+plt.show()
+exit
+```
+
+
+
+
+

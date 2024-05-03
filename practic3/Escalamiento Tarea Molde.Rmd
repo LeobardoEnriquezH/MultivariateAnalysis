@@ -152,7 +152,7 @@ datos[, analisis] <- round(datos[, analisis])
 
 for(indice in analisis){
   for(n in 1:nrow(datos)){
-    datos[n,indice] = recode(datos[n,indice], "0:20=1; 21:40=2; 41:60=3; 61:80=4; 81:100=5")
+    datos[n,indice] = car::recode(datos[n,indice], "0:20=1; 21:40=2; 41:60=3; 61:80=4; 81:100=5")
   }
 } 
 
@@ -173,6 +173,9 @@ ordinales <- which( sapply(datos, is.ordered) )  # ordinales
 fecha <- which(tipo == "Date") # Fecha
 categoricas <- names(c(nominales, ordinales, fecha))
 ```
+
+
+
 
 # Calculo de la matriz de Disimilaridad
 
