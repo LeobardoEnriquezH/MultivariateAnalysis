@@ -1,5 +1,5 @@
 ---
-title: "Escalamiento no métrico"
+title: "Escalamiento multidimensional no métrico"
 output:
   pdf_document: default
   html_document: default
@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Librerias necesarias
+
 ```{r}
 library(car)
 library(smacof)
@@ -25,15 +26,15 @@ source("utilerias/funciones.R")
 
 # Introducción:
 
-Se hace un análisis de escalamiento multidimensional, seleccionaremos la mejor dimensión con los ratings(columnas 5:18) de la base de datos ``RockHard`` del paquete ``smacof``. Los datos son de la revista RockHard, una revista alemana de heavy metal, los redactores valoran cada mes alrededor de 50 discos en una escala de (0... peor a 10... mejor), el conjunto de datos contiene todas las calificaciones de 2013. Los evaluadores en las columnas, y las bandas/álbumes en las filas.
+Se hace un análisis de escalamiento multidimensional, seleccionaremos la mejor dimensión con las calificaciones o los ratings (columnas 5:18) de la base de datos ``RockHard`` del paquete ``smacof``. Los datos son de la revista RockHard, una revista alemana de heavy metal, los redactores valoran cada mes alrededor de 50 discos en una escala de (0 como peor a 10 como mejor), el conjunto de datos contiene todas las calificaciones de 2013. Los redactores o evaluadores en las columnas, y las bandas/álbumes en las filas.
 
-# Sinapsis
 
-El escalamiento multidimensional no métrico tiene por objetivo preservar las disimilaridades mientras se posicionan los objetos en una menor dimension. Se aplica principalmente sobre datos ordinales o ratings. 
+
+El escalamiento multidimensional no métrico tiene por objetivo preservar las disimilaridades mientras se posicionan los objetos en una menor dimension. Se aplica principalmente sobre datos ordinales, en este caso las calificaciones o ratings para las bandas y album. 
 
 Pasos escenciales:
 
-0.- Preprocesamiento(Datos atípicos, escalamiento, transformaciones)
+0.- Preprocesamiento (Datos atípicos, escalamiento, transformaciones)
 
 1.- Matriz de datos con escala ordinales (Definir rangos)
 
@@ -45,14 +46,14 @@ Pasos escenciales:
 
 
 
-## Carga de la informacion
+# Carga de la informacion
 
-Práctica sobre el los ratings de bandas y álbunes de música de la revista RockHard para los 12 meses del año 2013, un album por cada banda. 
+En esta práctica analizaremos  los ratings de bandas y álbunes de música de la revista RockHard para los 12 meses del año 2013, un album por cada banda. 
 
 
-Variables: Indices o ratings dados por 14 personas: Gotz, Thomas, Frank, Bjorn, Jan, Boris, Himmelstein, Michael, Jens, Ronny, Felix, Jakob, Marcus y Jenny. 
+Las variables categóricos ordinales son las calificaciones para las bandas y sus álbunes dados por 14 personas; Gotz, Thomas, Frank, Bjorn, Jan, Boris, Himmelstein, Michael, Jens, Ronny, Felix, Jakob, Marcus y Jenny. 
 
-Mostramos los primeros 10 banda y album.
+Para tener una idea general de la base de datos, mostramos los primeros 10 bandas y álbunes. 
 
 
 ```{r}
@@ -118,7 +119,6 @@ Observemos en la siguiente tabla de correlaciones, que todas están en los mismo
 
 
 ```{r}
-#cor(na.omit(data1))
 options(digits=2)
 cor(data1,  method = "pearson", use = "pairwise.complete.obs")
 ```
@@ -132,9 +132,8 @@ data1<-subset(data1, select = -c(Michael, Jens, Ronny, Felix, Jakob, Marcus, Jen
 
 
 ```{r}
-#cor(na.omit(data1))
 options(digits=2)
-cor(data1,  method = "pearson", use = "pairwise.complete.obs")
+cor(data1,  method = "pearson")
 ```
 
 
@@ -171,7 +170,7 @@ data1$grado <- factor(data1$grado, levels= c("Bajo","Medio","Alto","Muy alto"), 
 ```
 
 
-Luego indicamos las variables auxiliares, variables de análisis, y juntamos toda la información a utilizar en el análisis en una sola base de datos. 
+Luego indicamos las variables auxiliares y las variables de análisis (las que entran directamente en los cálculos numéricos), y juntamos toda la información a utilizar en el análisis en una sola base de datos (la matriz de información). 
 
 
 ```{r}
@@ -186,7 +185,7 @@ datos <- data1[, columnas] # Extraccion
 # Escalas Iniciales
 
 
-Verificamos y asignamos las escalas iniciales, y el tipo de variables entre numéricas contínuas y enteras, o categóricas nominales y otrdinales. 
+Verificamos y asignamos las escalas iniciales, y el tipo de variables entre numéricas contínuas y enteras, o categóricas nominales y ordinales. 
 
 
 ```{r}
@@ -214,7 +213,7 @@ categoricas <- names(c(nominales, ordinales, fecha))
 * Distribuciones
 
 
-A continuación mostramos los histogramas, de los ratings de cada uno de los 14 participantes.
+A continuación mostramos el histograma de la variable promedio creada a partir de los ratings o calificaciones de todos, y los histogramas de  de cada uno de los 7 participantes o redactores que asignan la calificación.
 
 
 
@@ -225,7 +224,7 @@ par(mfrow= c(2,2) )
 multi.hist(datos[, numericas])
 ```
 
-En el siguiente BoxPlot no parece haber problemas de escala, por lo que usaremos los datos sin estandarizar.
+En el siguiente BoxPlot no parece haber problemas de escala con las calificaciones. También se puede observar la variable de grado, en el segundo Boxplot, que es categórica ordinal. 
 
 
 
@@ -233,11 +232,18 @@ En el siguiente BoxPlot no parece haber problemas de escala, por lo que usaremos
 # Boxplot
 boxplot(datos, main="Caja y Bigotes",
         frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
-
-# Andrews ##CORREGIR!!!
-#andrews(df = datos, type=2, bty = "n", ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" ); grid()
 ```
 
+
+
+El Gráfico Andrews, es una forma de representar datos de dimensiones superiores en un espacio inferior para que el análisis sea sencillo. Se representa mediante una serie de Fourier y también se puede considerar como una proyección de puntos de datos de dimensiones superiores en un vector dinámico.
+
+
+
+```{r}
+# Andrews
+andrews(df = datos, type=2, bty = "n", ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" ); grid()
+```
 
 
 
@@ -245,14 +251,13 @@ boxplot(datos, main="Caja y Bigotes",
 
 * Importante ver que la variable auxiliar ayuda a identificar observaciones que afecten el análisis.
 
-En el siguiente BoxPlot se observan algunos outliers por debajo del primer quartil, sin embargo no quitaremos esta información porque quita representatividad a la clasificación de "bajo". 
+En el siguiente BoxPlot se observan algunos outliers por debajo del primer quartil, sin embargo NO quitaremos esta información porque quita representatividad a la clasificación de "bajo". 
 
 
 
 ```{r}
 outliers <- boxplot(datos$avrating)$out
 elementos <- which(datos$avrating %in% outliers)
-
 #datos <- datos[-union(elementos,elementos), ]
 ```
 
@@ -260,7 +265,8 @@ elementos <- which(datos$avrating %in% outliers)
 
 # Escalamiento
 
-Iportante que los indices se recodifican a una escala ordinal, pero primero se normalizan ya que se trata de un indice.
+En general, es importante recordar que los indices se recodifican a una escala ordinal, pero primero se normalizan. Sin embargo, en la base de datos que estamos analizando tenemos calificaciones de 0 a 10, no parece haber un problema grave de escalas, por lo que no sería necesario normalizar. Pero, vamos a normalizar para tenerlos en escala de 0 a 1, lo cual no es necesario, pero lo trabajaremos así ya que estamos tratando con distancias.    
+
 
 ```{r}
 # Normalizacion
@@ -273,13 +279,15 @@ boxplot(datos[, analisis], main="Caja y Bigotes",
 
 # 1 Matriz de datos con escala ordinales
 
-Definicion de rangos para la escala de lickert
+Definicion de rangos para la escala de lickert, con las siguientes categorías, para poder utilizar escalamiento no métrico con las variables de análisis.  Recordemos que nos interesan las categorías ordinales de la variable ``grado`` de tipo bajo, medio, alto y mul alto.  Se escalan al nivel 0 a 100, y se redondean para poder aplicar el analisis.  
 
-0-20 -> 1
-21:40 -> 2
-40:60 -> 3
-61:80 -> 4
-81:100 -> 5
+0-40 -> 1
+
+40:60 -> 2
+
+61:80 -> 3
+
+81:100 -> 4
 
 
 
@@ -321,7 +329,7 @@ categoricas <- names(c(nominales, ordinales, fecha))
 
 # Calculo de la matriz de Disimilaridad
 
-* Como las variables son en escala ordinal, ent se utiliza distancia gower(mixtas).
+* Como las variables son categóricas en escala ordinal, entonces se utiliza distancia gower(mixtas), para tener la matriz de disimilarides a través de variables categóricas ordinales ya escaladas y ordenas de manera adecuada para que funcione el algoritmo de ``daisy``.     
 
 ```{r}
 gower_dist <- daisy(datos[, analisis], metric = "gower")
@@ -332,15 +340,15 @@ gower_dist <- daisy(datos[, analisis], metric = "gower")
 
 # Escalamiento no métrico
 
-* Métricas de ajuste: En este caso, a prueba y error se encontro que 5 es la mejor dimensión. 
+* Métricas de ajuste:  Sabemos que  una regresión monótona, tiene ciertas métricas de ajuste, como los siguientes.  En este caso, a prueba y error se encontro que 7 es la mejor dimensión, pues conforme disminuimos la dimensión los valores de estas variables de ajuste. 
 
-Stress: con valor entre [0,1] y entre mas pequeño mejor. 
+Stress: con valor entre [0,1] y entre mas pequeño (más cercano a cero) es mejor. 
 
-RSS: entre mas pequeño mejor. 
+RSS: entre mas pequeño es mejor.  
 
 
 ```{r}
-fit.datos <- smacofSym(gower_dist, type = "ordinal", ndim = 5)
+fit.datos <- smacofSym(gower_dist, type = "ordinal", ndim = 7)
 Stress<-fit.datos$stress
 sprintf("Stress: %f", Stress)
 RSS<-fit.datos$rss
@@ -349,6 +357,8 @@ sprintf("RSS: %f", RSS)
 ```
 
 
+
+En la siguiente Gráfica se muestra la dispersión, en donde se quiere observar la banda y album con el tipo de grado que tiene en cuanto a la calificación promedio. 
 
 
 ```{r}
@@ -359,6 +369,7 @@ plot(fit.datos, plot.dim = c(1,2), main = "Escalamiento Multidimensional No metr
 ```
 
 
+En la siguiente Gráfica se muestra la curva Shepard, las franjas grises son un poco anchas, es decir, se tienen RSS algo grandes, lo cual habla de un ajuste de la regresión monótona no tan bueno.  
 
 
 ```{r}
@@ -385,7 +396,10 @@ Para mejorar el ajuste, se puede intentar los siguiente:
 
 5. Usar otro metodo como t-sne
 
+
 # Implementación de t-sne
+
+
 
 ```{python Modulos}
 from sklearn.manifold import TSNE

@@ -1,0 +1,179 @@
+---
+title: "Escalamiento"
+author: "Tlahuiz Tenorio Giovanni Saúl & Leobardo Enriquez Hernandez"
+date: "5/5/2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+library(readr)
+library(psych)
+library(car)
+library(dplyr)
+library(andrews)
+library(kableExtra)
+library(scales)
+```
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+data <- read_delim("marketing_campaign.csv", 
+    delim = "\t", escape_double = FALSE, 
+    trim_ws = TRUE)
+```
+
+
+
+Veamos cómo se ve la informacion.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+summary(data)
+```
+
+Ya que vimos un resumen rapido de la informacion lo que sigue es tomar las variables que nos serviran de auxiliares y las que nos serviran para el analisis.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#variables auxiliares
+auxiliares <- colnames(data[, c(1)])
+analisis <- colnames(data[,10:15])
+
+columnas <- c(auxiliares, analisis)
+
+```
+
+Extraemos los datos.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+datos <- data[, columnas] # Extraccion
+head(datos)
+```
+
+
+Veamos las estadisticas multivariadas con histogramas y box plot.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+multi.hist(datos[,analisis], bcol = "steelblue", dcol = "red")
+```
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+boxplot(datos[,analisis], main="Boxplot", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4, col = "dodgerblue");grid()
+```
+
+```{r,echo=FALSE,message=FALSE,warning=F}
+andrews(df = datos, type=2,  bty = "n", 
+        ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" );grid()
+```
+
+El paso siguiente para nuestro analisis es la normalización de nuestros datos, este paso es muy importante ya que lo obtenido en este punto servirá despues para obtener la escala de lickert que se definirá.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+new_scale <- rescale(datos$MntWines)
+new_scale2 <- rescale(datos$MntFruits)
+new_scale3 <- rescale(datos$MntMeatProducts)
+new_scale4 <- rescale(datos$MntFishProducts)
+new_scale5 <- rescale(datos$MntSweetProducts)
+new_scale6 <- rescale(datos$MntGoldProds)
+
+base_escalada <- data.frame(MntWines = new_scale,
+                        MntFruits = new_scale2,
+                        MntMeatProducts = new_scale3,
+                        MntFishProducts = new_scale4,
+                        MntSweetProducts = new_scale5,
+                        MntGoldProds = new_scale6)
+
+kable(head(base_escalada),format = "markdown")
+```
+
+Con los cambios realizados a los datos veremos cómo cambió esto con unos boxplot, en estos vemos que cambió la escala que teniamos antes y tenemos valores fuera del rango del tercer cuantil, lo cual por la forma en que se ven los puntos nos dice que pueden ser valores extremos.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+boxplot(base_escalada, main="Caja y Bigotes", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4, col = "seagreen", las = 2);grid()
+```
+
+# 1 Matriz de datos con escala ordinales
+
+Definicion de rangos para la escala de lickert
+
+0-20 -> 1
+
+21:40 -> 2
+
+40:60 -> 3
+
+61:80 -> 4
+
+81:100 -> 5
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Tranaformacion a escala ordinal
+datos_new <- base_escalada*100
+datos_new <- round(datos_new)
+```
+
+Matriz de correlación.
+
+```{r}
+R <- cor(datos_new, method = "spearman")
+R
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# Prueba de Bartlet Ho: R = I
+p_esf <- cortest.bartlett(R, 200)
+p_esf$p < 0.05
+
+# Prueba de KMO
+pruebaKMO <- KMO(R)
+pruebaKMO
+
+```
+
+
+Del resultados de la prueba de Bartlet tenemos que rechazamos la hipótesis nula, por lo que sí tenemos correlación entre las variables, además con la prueba del KMO obtuvimos un valor de 0.86 lo que significa que tenemos un valor Bueno por lo que sí se puede hacer análisis factorial.
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+parallel <- fa.parallel(R, fm="pa", fa='fa') # Paralelo, Componentes principales, sin rotacion
+scree(datos_new);grid() # Scree
+```
+
+
+Con el screeplot lo que vemos es que solo tenemos un factor significativo por lo que se usará ese valor para el análisis.
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+k <- 1# Numero de factores
+ajuste <- fa(R, nfactors = k, rotate = "none", fm="pa")
+print(ajuste, digits=2, cutoff=0.3, sort=TRUE)
+ajuste$loadings # Cargas estimadas
+fa.diagram(ajuste)
+```
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+ajuste_varimax <- fa(R, nfactors = k, rotate = "varimax", fm="pa")
+print(ajuste, digits=2, cutoff=0.3, sort=TRUE)
+ajuste_varimax$loadings # Cargas estimadas
+fa.diagram(ajuste_varimax)
+```
+
+De los ajustes realizados con el factor que se escogió vemos que si una persona compra Productos como GoldProds, Wines, además de alimentos como FishProducts entre otros es un consumidor que tiene un ingreso mas alto con respecto a los que no compran este tipo de alimentos, por otro lado si tenemos que una persona solo compra cosas como MeatProducts Fruits sin tomar productos como Fish y Wines entonces es un consumidor que solo compra lo necesario o la canasta básica.
+
+
+
+
+
+
+
+
+
+
