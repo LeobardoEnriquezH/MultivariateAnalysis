@@ -1,0 +1,204 @@
+---
+title: "Escalamiento no metrico"
+output: html_document
+date: "2024-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerias necesarias
+```{r}
+library(cluster)
+library(andrews)
+library(clustMixType)
+library(clusterCrit)
+library(DataExplorer)
+source("utilerias/funciones.R")
+```
+
+# Sinapsis
+* La clusterizacion con datos Mixtos, involucra las siguientes estrategias con nivel de recomendacion:
+1 Mixtos -> Clusterizacion
+2 Mixtos -> Disimilaridad Mixtos -> Clusterizacion
+3 Mixtos -> Numericos -> Disimilaridad Numerica -> Clusterizacion
+
+
+# Pasos escenciales
+1: Preprocesamiento(escalamiento, datos atipicos, datos faltantes, feature selection,...)
+2: Calculo de la matriz de disimilaridad
+3: Metodo de clusterizacion(Jerarquico o  Particional)
+4: Metricas de Ajuste
+5: Mejoras
+
+## Carga de la informacion
+```{r}
+# Carga de la informacion
+data = read.csv("customer_churn.csv")
+```
+Se tienen variables mixtas, por lo que es necesario saber de que forma es el calculo de la
+matriz de disimilaridad o similaridad. Se tienen las 3 opciones:
+
+
+
+# Formato Correcto
+```{r}
+# Nombre repetido
+data$Names[23] <- "Jennifer Wood A"
+data$Names[440] <- "Jennifer Wood B"
+
+# Establecer indice de tabla
+rownames(data) <- data$Names; data$Names <- NULL
+
+# Age -> Enero
+data$Age <- as.integer(data$Age)
+
+# Num_Sites -> Entero
+data$Num_Sites <- as.integer(data$Num_Sites)
+
+# Acount Manager
+data$Account_Manager <- as.factor(data$Account_Manager)
+
+# Date
+data$Onboard_date <- as.Date(data$Onboard_date)
+
+# Company
+data$Company <- as.factor(data$Company)
+
+# Churn Binaria asimetrica
+data$Churn <- as.factor(data$Churn)
+```
+
+
+# Extraccion
+La informacion debe ser suministrada por el dueño de los datos.
+```{r}
+columnas <- colnames(data)[c(1:5,9)]
+datos <- data[, columnas] # Extraccion
+
+# Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- names(which( tipo == "factor") ) # nominales
+ordinales <- names(which( sapply(datos, is.ordered) ) )  # ordinales
+categoricas <- c(nominales, ordinales)
+
+fecha <- names(which(tipo == "Date")) # Fecha
+```
+
+# Descriptivos Multivariados
+* Identificar Atipicos
+* Problemas de escala
+* Distribuciones
+```{r}
+# Identificar datos faltantes
+length(complete.cases(datos))
+
+# Histogramas
+multi.hist(datos[, numericas])
+
+# Boxplot
+boxplot(datos, main="Caja y Bigotes", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+
+# Andrews
+andrews(df = datos, type=2, family="Ubuntu Condensed", bty = "n", 
+        ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" );grid()
+```
+
+# Escalamiento
+* Para clusterizacion es necesario escalar las variables antes de calcular las distancias
+* En este caso solo se normalizan las variables numericas
+```{r}
+# Columnas
+auxiliares <- "Churn"
+columnas <- setdiff(colnames(datos), c(auxiliares,categoricas) ) # A sabiendas
+
+# Normalizacion
+datos.norm <- datos
+datos.norm[, columnas] <- sapply(datos[, columnas], function(data){
+         (data - min(data)) / (max(data) - min(data))})
+```
+
+# Clusterizacion
+1 Mixtos -> Clusterizacion
+* Existen metodos de clusterizacion con tratamiento de datos mixtos. k-prototypes es una variante
+de k-means para datos mixtos.
+* Se utiliza el grafico de codo, ya q la funcion kproto no se presta para un metodo de siluetas
+```{r}
+auxiliares <- "Churn"
+columnas <- setdiff(colnames(datos), auxiliares)
+
+# Generacion de clusters a diferentes particiones
+Es <- numeric(10)
+for(i in 1:10){
+  kpres <- kproto(datos.norm[, columnas], k = i, nstart = 5)
+  Es[i] <- kpres$tot.withinss
+}
+plot(1:10, Es, type = "b", ylab = "Objective Function", xlab = "# Clusters",
+main = "Scree Plot");grid()
+
+kpres <- kproto(datos.norm[, columnas], k = 5, nstart = 5)
+kpres$cluster
+
+# Visualizacion Escalamiento No metrico
+```
+
+2 Mixtos -> Disimilaridad Mixtos -> Clusterizacion
+* Para el calculo de la disimilaridad con datos mixtos es usualmente con la distancia Gower
+```{r}
+auxiliares <- "Churn"
+columnas <- setdiff(colnames(datos), auxiliares)
+
+# Generacion de clusters a diferentes particiones. Gower estandariza
+D <- daisy(datos[ ,columnas], metric = "gower")
+
+cluster.pam <- pam(D, diss = TRUE, k = 5)
+
+# Visualizacion. No da pca por ser D
+plot(cluster.pam)
+
+cluster.pam$silinfo
+```
+
+3 Mixtos -> Numericos -> Disimilaridad Numerica -> Clusterizacion
+* Esta tecnica es solo referenciando a la dumificacion coherente para establecer "valores numericas"
+```{r}
+
+# Dumificacion de categoricas a numericas. Pierde sentido en la dumificacion
+auxiliares <- "Churn"
+columnas <- setdiff(colnames(datos), c(numericas,auxiliares))
+datos.norm[, columnas] <- as.integer(as.character(datos.norm[,columnas])) # Por ser binaria
+
+# Generacion de clusters a diferentes particiones
+columnas <- setdiff(colnames(datos), auxiliares)
+D <- daisy(datos.norm[ ,columnas], stand = FALSE)
+
+cluster.pam <- pam(D, diss = TRUE, k = 5)
+
+# Visualizacion. PCA  y Siluetas
+plot(cluster.pam)
+cluster.pam$silinfo
+```
+
+
+# Mejoras Particionales
+
+Para mejorar una clusterización particional, se pueden implementar varias estrategias efectivas:
+
+1. Selección adecuada del número de clusters (k): Es fundamental elegir el número óptimo de clusters para evitar sub o sobreajuste. Métodos como el codo (elbow method) o el índice de silueta pueden ser útiles para determinar el número adecuado de clusters.
+
+2. Preprocesamiento de datos: Realizar una limpieza y normalización de los datos puede mejorar significativamente la calidad de la clusterización. Eliminar outliers y tratar valores faltantes puede ayudar a obtener resultados más precisos[3].
+
+3. Uso de técnicas de reducción de dimensionalidad: Aplicar técnicas como PCA (Análisis de Componentes Principales) antes de la clusterización puede simplificar la estructura de los datos y mejorar la eficiencia del algoritmo.
+
+4. Evaluación de la calidad de los clusters: Es importante utilizar métricas de evaluación como el índice de Davies-Bouldin, la pureza o la medida Fowlkes-Mallows para medir la cohesión y separación de los clusters y así determinar la calidad de la clusterización.
+
+5. Exploración de diferentes algoritmos de clustering: Probar diferentes algoritmos de clustering, como K-Means, K-Medoids, o DBSCAN, y comparar sus resultados puede ayudar a identificar el enfoque más adecuado para los datos específicos y mejorar la clusterización.
+
+Calinski-Harabasz

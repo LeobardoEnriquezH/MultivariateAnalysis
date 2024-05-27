@@ -1,0 +1,8 @@
+Indicaciones:
+I Revisar los tre block de notas:
+	1 Escalamiento en Cluster Wine
+	2 Swiss Jerarquico Datos atipicos
+	3 customer_churn Clusterizacion
+
+II Realizar una clusterizacion con la informacion costumer-segmentation.csv quitando la variable "Segmentation"
+III Posteriormente determinar si las clusterizacion se da con respecto a la variable "Segmentation" como variable auxiliar

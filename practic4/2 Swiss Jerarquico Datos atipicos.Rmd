@@ -1,0 +1,241 @@
+---
+title: "Escalamiento no metrico"
+output: html_document
+date: "2024-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerias necesarias
+```{r}
+library(cluster)
+source("utilerias/funciones.R")
+library(andrews)
+library(fpc)
+library("scatterplot3d")
+library(MASS)
+library(Rtsne)
+library(factoextra)
+library(clusterCrit)
+```
+
+# Sinapsis
+La clusterizacion genera grupos de observaciones, que sean lo mas homogeneos dentro de cada grupo y heterogeneos entre grupos 
+
+# Pasos escenciales
+1: Preprocesamiento(escalamiento, datos atipicos, datos faltantes, feature selection,...)
+2: Calculo de la matriz de disimilaridad
+3: Metodo de clusterizacion(Jerarquico o  Particional)
+4: Metricas de Ajuste
+5: Mejoras
+
+## Carga de la informacion
+Datos swiss. Tiene escalas con %, lo ideal seria multiplicarlo por su base(no conocida) y tener conteos a escala entera
+```{r}
+datos <- swiss
+```
+
+# Formato Correcto
+
+# Seleccion de las columnas auxiliares y de analisis.
+
+# Escalas Iniciales
+```{r}
+# Escalas
+tipo <- sapply(datos, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(datos, is.ordered) )  # ordinales
+categoricas <- names(c(nominales, ordinales))
+fecha <- which(tipo == "Date") # Fecha
+```
+
+# Descriptivos Multivariados
+* Identificar Atipicos
+* Problemas de escala
+* Distribuciones
+```{r}
+# Histogramas
+multi.hist(datos[, numericas])
+
+# Boxplot
+boxplot(datos, main="Caja y Bigotes", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+
+# Andrews
+andrews(df = datos, type=2,  bty = "n", 
+        ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" );grid()
+```
+
+# Escalamiento
+* Se grafican los dos tipos de escalamiento.
+```{r}
+# Normalizacion
+datos.norm <- sapply(datos, function(data){
+         (data - min(data)) / (max(data) - min(data))})
+rownames(datos.norm) <- rownames(datos)
+
+# Boxplot
+boxplot(datos.norm, main="Caja y Bigotes", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables Normalizadas", ylab= "Escala Normal", cex=0.4);grid()
+
+# Escalamiento Es mejor!
+datos.std <- scale(datos)
+rownames(datos.std) <- rownames(datos)
+
+# Boxplot
+boxplot(datos.std, main="Caja y Bigotes", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables Estandarizadas", ylab= "Escala Normal", cex=0.4);grid()
+```
+- Se tiene una mejor forma con estandarizacion
+
+# Detectando Atipica Univariadamente
+* Se detectan los atipicos univariados
+```{r}
+# Univariados
+atipicos <- list()
+atipicos.unicos <- c()
+for(variable in colnames( datos.std) ){
+  atipicos[[variable]] <- boxplot(datos.std[, variable])$out
+  names(atipicos[[variable]]) <- which(datos.std[, variable] %in% atipicos[[variable]])
+  atipicos.unicos <- c( atipicos.unicos,  names( atipicos[[variable]]) )
+  atipicos.unicos <- union( atipicos.unicos,  names( atipicos[[variable]]) )
+}
+
+# Etiquetado
+atipicos.unicos <- as.integer(atipicos.unicos) # Necesario por R
+names(atipicos.unicos) <- rownames(datos.std)[atipicos.unicos]
+
+atipicos.unicos
+```
+
+# Deteccion Atipicos Multivariado
+* Se identifican los univariados, multivariados y se intersectan para ver si un univariado
+implica un atipico multivariado
+```{r}
+
+# Aplicar pca o escalamiento
+datos.pca <- princomp(datos.std, cor = FALSE)
+summary(datos.pca)
+
+# Mahalanobis
+bondadNM <- MVN::mvn(data = as.data.frame(datos.std), mvnTest="royston", multivariateOutlierMethod="quan")
+
+x <- mahalanobis(datos.std, colMeans(datos.std), cov(datos.std))
+hist(x, freq=FALSE, col="skyblue", border=0, main= "Mahalanobis"); curve(dchisq(x,ncol(datos)), add=TRUE);grid()
+
+atipicos[["Mahalanobis"]] <- which(x > qchisq(0.975, ncol(datos.std)))
+
+etiquetas <- rep(x = "tipico", nrow(datos.std))
+etiquetas[ atipicos$Mahalanobis ] <- "atipico"
+etiquetas <- factor(etiquetas) # Necesario para graficar
+names(etiquetas) <-  rownames(datos.std)
+
+# Grafico PCA
+colors <- c("#000000", "#CC0000")
+colors <- colors[as.numeric(etiquetas)]
+g3d <-scatterplot3d(datos.pca$scores[, 1:3], pch = 16, box=FALSE, color=colors, type="h") #3D
+text(g3d$xyz.convert(datos.pca$scores[atipicos$Mahalanobis, 1:3]), 
+     labels = names(etiquetas)[atipicos$Mahalanobis],cex= 0.7, col = "steelblue")
+
+# 2D
+plot(datos.pca$scores[, 1:2], pch = 16, col = etiquetas, bty = "n");grid()
+text(datos.pca$scores[atipicos$Mahalanobis, 1], datos.pca$scores[atipicos$Mahalanobis, 2], 
+     labels=names(atipicos$Mahalanobis) )
+
+# Intersectando univariados con multivariados. Posible univariado implica multivariado
+implicados <- intersect(atipicos.unicos,atipicos$Mahalanobis)
+names(implicados) <- rownames(datos)[implicados]
+
+# t-sne Problemas de tamaño de muestra
+#tsne_data <- Rtsne(datos, perplexity = 20)
+
+implicados
+```
+- La variable implicados detecta que las observaciones V. De Geneve y La Valle son atipicos Multivariados
+segun Mahalanobis. Aunque no cumple con ser Normal Multivariada como para asegurar que las curvas
+elipticas se distribuyan Ji-cuadrada
+
+- Se opta por clusterizacion para identificar atipicos
+
+# Disimilaridad
+* Se calcula la disimilaridad Euclidiana por se variables numericas.
+```{r}
+D <- daisy(datos.std, metric = "euclidean", stand= FALSE)
+```
+
+# Clusterizacion
+* Se aplica 3 metodos de clusterizacion Jerarquicos: diana, vecino mas cercano y vecino mas lejano
+```{r}
+
+# Divisibles
+datos.diana <- diana(x = D, diss = TRUE, stand = FALSE)
+plot(datos.diana)
+
+# Aglomerativos
+
+# Vecino mas cercano
+vec_lej <- hclust(D, method = 'single')
+plot(vec_lej) # Dendograma cluster
+fviz_dend(vec_lej, k = 4) # Restringido a una serie de metodos
+
+# Vecino mas lejano
+vec_cerc<-hclust(D, method = 'complete')
+plot(vec_cerc) # Dendograma cluster
+fviz_dend(vec_cerc, k = 4) # Restringido a una serie de metodos
+```
+- El coeficiente de divisivilidad es de 0.86( grafico Banner), cercano a 1; indica que los clusters resultantes son más homogéneos y cohesivos.
+- En dendogramas se visualiza que V. De Geneve y La Valle se aglomeran a un height muy grande
+
+# Metricas de ajuste
+* Dunn: tiene un rango [0, inf] y entre mas grande mejor.
+* Davies-Bouldin: tiene un rango [0, inf] y entre mas pequeño mejor.
+* Los metodos Jerarquicos no tienen un estadistico para determinar el numero de clusters(Como es el
+metodo de siluetas o estadistico gap en los particionales). Pero
+se usa la funcion cutree para hacer cortes y dividir a las observaciones en diferentes numero
+de clusters. Posteriormente se aplican los estadisticos Dunn y Davies- Bouldin q no dependen
+de centroides o medoides
+```{r}
+# Calculo de los indices
+dunn <- vector() # Indice Dunn
+db <- vector() # Indice Davies-Bouldin
+for (k in 2:7) {
+  clusters <- cutree(datos.diana, k = k)
+  names(clusters) <- rownames(datos)
+  dunn <- c(dunn,as.numeric(intCriteria(datos.std, clusters, "Dunn")))
+  db <- c(db,as.numeric(intCriteria(datos.std, clusters, "Davies_Bouldin")))
+}
+names(dunn) <- names(db) <- 2:7
+
+plot(2:7, dunn, bty = "n",pch = 16, type="b", main="Indice DUNN", xlab="Numero de clusters");grid()
+plot(2:7, db, bty = "n",pch = 16, type="b", main="Davies_Bouldin", xlab="Numero de clusters");grid()
+
+```
+- En ambos graficos, no se presentan codos que evidencien el numero de clusters. Pero se considera un cambio de razon mas pequeño de 6 a 7. Asi que se toma el numero de cluster igual a 6.
+
+# Grafico dado el numero ideal
+* Se aplica la clusterizacion con 6 clusters unicamente para diana.
+```{r}
+fviz_dend(datos.diana, k = 6) # Restringido a una serie de metodos
+```
+- Al identificar los 6 clusters, nuevamente las variables V. De Geneve y La Valle se caracterizan como clusters
+de un solo elemento; por lo que se identifican como atipicos multivariados.
+
+# Mejoras Jerarquicos
+Para mejorar una clusterizacion Jerarquica. Se recomienda:
+
+1. Estandarizacion de los datos
+
+2. Cambiar el metodo
+
+3. Cambiar la medida de disimilaridad y va con la interpretacion
+
+4. Usar metricas de ajuste como los indices y Davies-Bouldin.
+
+5. Usar metodos baging o boostrap

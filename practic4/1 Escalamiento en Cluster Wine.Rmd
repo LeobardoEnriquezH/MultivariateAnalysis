@@ -1,0 +1,173 @@
+
+# Librerias necesarias
+```{r}
+library(dplyr)
+library(cluster)
+library(reticulate)
+library(factoextra)
+library(FactoMineR)
+```
+
+# Objetivo
+* Se obtiene la importancia del escalamiento en clusterizacion
+* Se intenta los dos tipos de escalamiento.
+
+* Presencia de valores atípicos: Si los datos tienen valores atípicos importantes que no se quieren perder, la estandarización (Z-score) sería preferible, ya que preserva la posición relativa de los valores atípicos.
+
+* Interpretabilidad: La estandarización (Z-score) puede hacer que los valores individuales pierdan interpretabilidad, mientras que la normalización (Min-Max) mantiene mejor la interpretabilidad de los valores.
+
+* Supuestos de los modelos: Si los datos deben cumplir con supuestos de normalidad para los modelos estadísticos, la estandarización (Z-score) puede ser más apropiada, ya que ayuda a ajustar los datos a una distribución normal.
+
+# Pasos escenciales
+1: Preprocesamiento(escalamiento, datos atipicos, datos faltantes, feature selection,...)
+2: Calculo de la matriz de disimilaridad
+3: Metodo de clusterizacion(Jerarquico o  Particional)
+4: Metricas de Ajuste
+5: Mejoras
+
+# Normalizacion con clusterizacion
+Se obtiene la informacion con respecto a la calidad de vinos. En este caso se elimina la variable target
+por lo que la clusterizacion se obtiene unicamente de las variables predictoras.
+```{python}
+import pandas as pd
+import numpy as np 
+from sklearn import datasets
+
+wine = datasets.load_wine() # Diccionario
+
+# Data frame
+wine = pd.DataFrame(
+    data=np.c_[wine['data'], wine['target']], 
+    columns=wine['feature_names'] + ['target'] 
+)
+
+X = wine.drop('target', axis=1)
+exit
+```
+- Todas las variables son numericas, por lo que no se necesitan dumificar.
+- El formato es el correcto
+
+# Datos Originales
+* Se realiza la clusterizacion sin ninguna transformacion
+* Se obtienen las componentes principales y se grafica a las dos primeras.
+* Se obtiene la importancia de las variables sobre las dos primeras pca
+* Se obtiene el grafico de siluetas(Pag 85. Finding groups in data, Kaufman):
+  
+```{r}
+
+# Informacion de datos
+datos <- py$X
+
+# Grafico de Caja y Bigotes
+par(bty = "n")
+boxplot(datos, main="Grafico de caja y bigotes",  
+        las = 2, cex=0.4, cex.main=1, cex.axis = 0.7, col = "sky blue", border= "black");grid()
+
+# Componentes principales
+data.pca <- princomp(datos, cor = TRUE, fix_sign = TRUE)
+summary(data.pca)
+
+# Aplicar clustering a los datos sin estandarizar
+datos.pam <- pam(datos, k = 3, stand = FALSE)
+plot(datos.pam)
+
+# Dispersion a las 2 primeras pca
+plot(data.pca$scores[,c(1,2)],  main = "Dispersion", col = factor(datos.pam$clustering),
+      cex=0.4, cex.main=1, bty = "n", family="JetBrains Mono");grid()
+
+# Importancia de las variables con datos estandarizados
+model_pca_manual=PCA(X = datos, scale.unit = F, graph = F)
+print(model_pca_manual)
+
+fviz_contrib(model_pca_manual,choice = 'var',axes = 1:2)+theme(axis.title = element_text(size = 8),
+                            axis.text = element_text(size = 6),title =element_text(size = 8))
+
+
+```
+- Se ven problemas de escala por parte
+- El grafico a dos componentes principales se ve una interseccion de los elementos de diferentes cluster.
+Esto indica un problemas de escala, ya que esta a los dos cuadrantes de las componentes principales.
+- El grafico de siluetas representa una buena clusterizacion, ya que tiene un promedio de siluetas de 0.57
+y solo tiene un silueta con valores negativos.
+
+
+# Estandarizacion
+* Se realiza la estandarizacion
+* Clusterizacion particional, con metodo PAM(Variante de K-means) con diferente num de medoides
+```{r}
+# Informacion de datos
+datos_est <- scale(datos)
+
+# Grafico de Caja y Bigotes
+par(bty = "n")
+boxplot(datos_est, main="Grafico de caja y bigotes",  
+        las = 2, cex=0.4, cex.main=1, cex.axis = 0.7, col = "sky blue", border= "black");grid()
+
+# Componentes principales
+data.pca.r <- princomp(datos, cor = TRUE)
+summary(data.pca.r)
+
+# Aplicar clustering (K-means) a los datos estandarizados
+datos.pam.r <- pam(datos_est, k = 3, stand = FALSE)
+plot(datos.pam.r)
+
+# Dispersion a las 2 primeras pca etiquetado singular
+plot(data.pca.r$scores[,c(1,2)],  main = "Dispersion", col = factor(datos.pam.r$clustering),
+      cex=0.4, cex.main=1, bty = "n", family="JetBrains Mono");grid()
+
+model_pca_manual.r = PCA(X = datos_est, scale.unit = F, graph = F)
+print(model_pca_manual.r)
+
+fviz_contrib(model_pca_manual.r ,choice = 'var',axes = 1:2)+theme(axis.title = element_text(size = 8),
+                            axis.text = element_text(size = 6),title =element_text(size = 8))
+```
+- Se hizo un recorrido de 2 a 6 clusters y se tiene que 3 resulto con mejor indicadores. El cual coincide
+con el numero de categorias en la variable target
+- El grafico a dos componentes principales se ve una mejor separacion de los clusters
+- Las 5 primeras componetes son significativas y, las dos primeras solo el 50%.
+- En el grafico de siluetas, se tiene una disminucion al promedio de siluetas: 0.27. Esto significa
+que hay cierta interseccion de los elementos etiquetados considerando todas las dimensiones.
+- Se ve una mejor distribucion sobre la importancia de las variables en las dos primeras pca.
+
+
+# Normalizacion
+* Se hace los mismos pasos que se hicieron en la estandarizacion
+```{r}
+# Informacion de datos
+datos_norm <- sapply(datos, function(x) (x - min(x)) / (max(x) - min(x)))
+
+# Grafico de Caja y Bigotes
+par(bty = "n")
+boxplot(datos_norm, main="Grafico de caja y bigotes",  
+        las = 2, cex=0.4, cex.main=1, cex.axis = 0.7, col = "sky blue", border= "black");grid()
+
+# Componentes principales
+data.pca.n <- princomp(datos_norm, cor = FALSE)
+summary(data.pca.n)
+
+# Aplicar clustering (K-means) a los datos estandarizados
+datos.pam.n <- pam(datos_norm, k = 3, stand = FALSE)
+plot(datos.pam.n)
+
+# Dispersion a las 2 primeras pca etiquetado singular
+plot(data.pca.n$scores[,c(1,2)],  main = "Dispersion", col = factor(datos.pam.n$clustering),
+      cex=0.4, cex.main=1, bty = "n", family="JetBrains Mono");grid()
+
+model_pca_manual.n = PCA(X = datos_norm, scale.unit = F, graph = F)
+print(model_pca_manual.n)
+
+fviz_contrib(model_pca_manual.n ,choice = 'var',axes = 1:2)+theme(axis.title = element_text(size = 8),
+                            axis.text = element_text(size = 6),title =element_text(size = 8))
+```
+- Se obtiene la misma estructura pero con un minimo aumento al promedio de siluetas a 0.28
+- Ahora los dos primeras componentes acumulan el 94%
+- Representa una mejor clusterizacion pues son mas concordantes los graficos de siluetas y pca
+
+Conclusiones:
+Se tiene que la escalabilidad mejora la clusterizacion. Los graficos de componentes principales
+pareciera que hace un contraste con los graficos de siluetas. Pero en realidad e grafico de siluetas
+contempla todas las dimensiones, los cuales, evidencian cierta interseccion entre clusters.
+
+Por otro lado, el grafico a los dos primeros pca tienen el 50% y 94% para estandarizacion y normalizacion
+respectivamente. Asi entonces, resulto mejor la normalizacion.
+
