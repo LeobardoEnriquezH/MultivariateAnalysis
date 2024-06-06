@@ -1,0 +1,287 @@
+---
+title: "Practica 4"
+author: "Saul & Leobardo"
+date: "4/6/2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# Configuracion global de los bloques de codigo (chunk's)
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.align = "center",
+	fig.dim = c(6, 5),
+	message = FALSE,
+	warning = FALSE,
+	error = F
+)
+
+#instalalmos las librerias a ocupar 
+library(dplyr)
+library(cluster)
+library(reticulate)
+library(factoextra)
+library(FactoMineR)
+library(ggplot2)
+library(andrews)
+library(fpc)
+library(scatterplot3d)
+library(MASS)
+library(Rtsne)
+library(clusterCrit)
+library(clustMixType)
+library(DataExplorer)
+library(readr)
+library(GGally)
+library(psych)
+```
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+data <- read_csv("costumer-segmentation.csv")
+summary(data)
+```
+
+
+```{r variables, echo=FALSE, message=FALSE,warning=FALSE}
+# Escalas
+tipo <- sapply(data, class)
+continuas <-  which(tipo == "numeric") # continuas
+enteras <- which(tipo == "integer") # enteras
+numericas <- names(c(continuas,enteras))
+
+# Variables Categoricas
+nominales <- which( tipo == "factor") # categoricas
+ordinales <- which( sapply(data, is.ordered) )  # ordinales
+categoricas <- names(c(nominales, ordinales))
+fecha <- which(tipo == "Date") # Fecha
+
+#vamos a convertir a factor las variables de tipo caracter para manipularlas mejor 
+
+
+#datos_numericos <- subset(datos,select = c('ID','Age','Work_Experience','Family_Size'))#seleccionamos unicamente las vatriables numericas 
+```
+
+
+
+
+```{r}
+# Veamos si existen datos faltantes
+length(complete.cases(data))
+
+# Histogramas
+multi.hist(data[, numericas])
+
+# Boxplot
+boxplot(data[,numericas], main="Caja y Bigotes", family="Ubuntu Condensed",
+        frame = FALSE, xlab="Variables", ylab= "Escala Normal", cex=0.4);grid()
+
+boxplot(data$Age, main = "Edades", family = "Ubuntu Condensed", frame = F, xlab = "Age", ylab = "Escala original", cex = 0.4, col = "steelblue");grid()
+
+boxplot(data$Work_Experience, main = "BoxPlot Experiencia laboral", family = "Ubuntu Condensed",
+        frame = F, xlab = "", ylab = "Años", cex = 0.4, col = "steelblue");grid()
+
+boxplot(data$Family_Size, main = "BoxPlot Tamaño Familia", family = "Ubuntu Condensed",
+        frame = F, xlab = "", ylab = "Integrantes", cex = 0.4, col = "steelblue");grid()
+
+# Andrews
+andrews(df = data, type=2, family="Ubuntu Condensed", bty = "n", 
+        ylab="f(t)", xlab="t",lwd=1, main="Grafico Andrews" );grid()
+```
+
+
+
+```{r}
+ggpairs(data,mapping = aes(color = Segmentation))
+```
+
+De las variables numericas se hicieron boxplot para la deteccion de valores atipicos donde se tuvo como resultado que las variables Experiencia Laboral y Tamaño Familia son las que mas presentan tener este tipo de datos, sin embargo por el tipo de comportamiento y dado el contexto de la base no se eliminaran ya que este tipo de valores atipicos podemos decir que implican a personas que tiene mayor experiencia laboral y tambien el tamaño de una familia puede variar.
+
+
+Para hacer la clusterizacion primero haremos una transformacion de las variables numericas que se tienen.
+
+
+
+```{r}
+auxiliares <- subset(data,select = c('ID','Age','Work_Experience','Family_Size'))
+columnas <- setdiff(colnames(data), c(auxiliares,categoricas) )
+
+datos_numericos <- subset(data,select = c('ID','Age','Work_Experience','Family_Size'))#seleccionamos los datos a normalizar
+
+datos_normalizados <- sapply(datos_numericos, function(data){
+         (data - min(data)) / (max(data) - min(data))})
+
+datos_std <- scale(datos_numericos)
+rownames(datos_std) <- rownames(datos_numericos)
+
+datos_std <- as.data.frame(datos_std)
+```
+
+
+Ya que se normalizaron las variables numericas pasamos al metodo de clusterizacion, en nuestro caso dado que tenemos variables mixtas usaremos k-prototypes
+
+```{r}
+auxiliares <- subset(data,select = c('ID','Age','Work_Experience','Family_Size'))
+columnas <- setdiff(colnames(data), auxiliares)
+
+# Generacion de clusters a diferentes particiones
+Es <- numeric(10)
+for(i in 1:10){
+  kpres <- kmeans(datos_std[,numericas], k = i, nstart = 5)
+  Es[i] <- kpres$tot.withinss
+}
+plot(1:10, Es, type = "b", ylab = "Objective Function", xlab = "# Clusters",
+main = "Scree Plot");grid()
+
+kpres <- kmeans(datos_std[,numericas], nstart = 5)
+kpres$cluster
+
+```
+
+
+```{r}
+auxiliares <- subset(data,select = c('ID','Age','Work_Experience','Family_Size'))
+columnas <- setdiff(colnames(data), auxiliares)
+
+# Generacion de clusters a diferentes particiones. Gower estandariza
+D <- daisy(data[ ,numericas], metric = "gower")
+
+cluster.pam <- pam(D, diss = TRUE, k = 5)
+
+# Visualizacion. No da pca por ser D
+plot(cluster.pam)
+
+cluster.pam$silinfo
+```
+
+
+
+```{r}
+
+# Dumificacion de categoricas a numericas. Pierde sentido en la dumificacion
+
+auxiliares <- subset(data,select = c('ID','Age','Work_Experience','Family_Size'))
+columnas <- setdiff(colnames(data), c(numericas,auxiliares))
+datos_std[,numericas] <- as.integer(as.character(datos_std[,numericas])) # Por ser binaria
+
+# Generacion de clusters a diferentes particiones
+columnas <- setdiff(colnames(data), auxiliares)
+D <- daisy(datos_std[ ,numericas], stand = FALSE)
+
+cluster.pam <- pam(D, diss = TRUE, k = 5)
+
+# Visualizacion. PCA  y Siluetas
+plot(cluster.pam)
+cluster.pam$silinfo
+```
+
+
+############################################################################################################
+
+# Otra forma de hacerlo
+
+```{r}
+library(clustMixType)
+
+scale_df <- data %>% as.data.frame()
+scale_df[,c(4,7,9)] <- scale(scale_df[,c(4,7,9)])
+head(scale_df)
+
+X_mat = subset(scale_df,select = c("Gender","Ever_Married","Age","Graduated","Profession","Work_Experience","Spending_Score","Family_Size","Var_1"))
+
+#vamos a convertir a factor las variables que no sean numericas de la variable X_mat
+
+X_mat$Gender <- as.factor(X_mat$Gender)
+X_mat$Ever_Married <- as.factor(X_mat$Ever_Married)
+X_mat$Graduated <- as.factor(X_mat$Graduated)
+X_mat$Profession <- as.factor(X_mat$Profession)
+X_mat$Spending_Score <- as.factor(X_mat$Spending_Score)
+X_mat$Var_1 <- as.factor(X_mat$Var_1)
+
+head(X_mat)
+
+
+```
+
+
+```{r}
+Es <- numeric(10)
+
+for(i in 1:10){
+  kpres <- kproto(X_mat, 
+                  k = i, nstart = 5, 
+                  lambda = lambdaest(X_mat),
+                  verbose = FALSE)
+  Es[i] <- kpres$tot.withinss}
+```
+
+
+```{r}
+tibble(Cluster = c(1:10), Es = Es) %>% 
+  ggplot(aes(x = Cluster, y = Es)) + 
+  geom_point(size = 3, 
+             col ="red3") +
+  geom_path() + 
+  geom_vline(xintercept = 3, 
+             linetype = 2)+
+  scale_x_continuous(breaks = c(1:10))
+```
+
+
+```{r}
+k_opt <- validation_kproto(method = "ptbiserial", data = X_mat, k = 2:10, nstart = 5)
+k_opt
+```
+
+
+```{r}
+tibble(Cluster = c(2:10), 
+       Metric = as.vector(k_opt$indices)) %>% 
+  ggplot(aes(x = Cluster, 
+             y = Metric)) + 
+  geom_point(size = 3, 
+             col ="red3") +
+  geom_path() + 
+  geom_vline(xintercept = 3, 
+             linetype = 2)+
+  scale_x_continuous(breaks = c(2:10))
+```
+
+
+
+```{r}
+kpres_3 = kproto(x = X_mat,
+                 k = 3,
+                 lambda = lambdaest(X_mat))
+```
+
+
+
+```{r}
+library(tidyr)
+valid_df <- df %>% mutate(Cluster = as.factor( kpres_3$cluster))
+
+valid_df %>% gather(Gender,Age,Ever_Married,Graduated,Profession,Work_Experience,Score_Spending,Family_Size,Var_1,key = "Para",value="Value")%>%
+  ggplot(aes(x=Value, fill = Cluster))+
+  geom_density(alpha=0.5,col="black")+
+  facet_wrap(~Para,ncol=2,scales = "free")+
+  scale_fill_manual(values=clust_colmap )
+```
+
+
+
+```{r}
+## KDE
+valid_df %>% ggplot(aes(x=Age,y=Gender))+
+  stat_density2d(geom="polygon",
+                 aes(fill=Cluster,
+                     col = Cluster,
+                     alpha = ..level..))+
+  geom_jitter(color="black",size=2, alpha = 0.3)+
+  scale_fill_manual(values=clust_colmap)+
+  scale_color_manual(values=clust_colmap)
+```
+
+
+
+
